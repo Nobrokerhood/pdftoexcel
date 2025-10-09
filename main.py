@@ -26,7 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = genai.GenerativeModel("gemini-1.5-flash-latest")
+model = genai.GenerativeModel("gemini-2.5-flash")
+
+@app.get("/")
+def read_root():
+    return {"status": "ok", "message": "API is running and ready"}
 
 # --- PROMPTS ---
 
@@ -65,13 +69,25 @@ def create_template_prompt():
     """
 
 def create_direct_export_prompt():
-    """Creates a prompt for direct-to-Excel export."""
+    """Creates a more robust prompt for direct-to-Excel export with a clear example."""
     return """
     You are an expert at table data extraction. Analyze the provided image and identify the main table.
     Extract all the data from the table exactly as it appears, row by row.
     Return the result as a valid JSON array of objects, where each object represents a row.
     Use the table's headers as the keys for each object.
     The output must only be the raw JSON array.
+
+    For example, if the table has columns "Name" and "Amount", the output should be:
+    [
+        {
+            "Name": "John Doe",
+            "Amount": 100
+        },
+        {
+            "Name": "Jane Smith",
+            "Amount": 200
+        }
+    ]
     """
 
 # --- Reusable function for file handling ---
@@ -111,7 +127,7 @@ async def process_document(file: UploadFile = File(...)):
             page_data = clean_and_parse_json(response.text)
             all_rows.extend(page_data)
         except Exception: continue
-    if not all_rows: raise HTTPException(status_code=400, detail="No data could be processed.")
+    if not all_rows: raise HTTPException(status_code=400, detail="No data could be processed for the template.")
     df = pd.DataFrame(all_rows)
     csv_buffer = io.StringIO()
     df.to_csv(csv_buffer, index=False)
@@ -128,7 +144,7 @@ async def export_to_excel(file: UploadFile = File(...)):
             page_data = clean_and_parse_json(response.text)
             all_data.extend(page_data)
         except Exception: continue
-    if not all_data: raise HTTPException(status_code=400, detail="No data could be extracted.")
+    if not all_data: raise HTTPException(status_code=400, detail="No data could be extracted for Excel.")
     df = pd.DataFrame(all_data)
     excel_buffer = io.BytesIO()
     df.to_excel(excel_buffer, index=False, sheet_name="Extracted Data")
