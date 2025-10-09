@@ -133,7 +133,7 @@ async def process_document(file: UploadFile = File(...)):
     df.to_csv(csv_buffer, index=False)
     return StreamingResponse(iter([csv_buffer.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=converted_template.csv"})
 
-@app.post("/export-to-excel/")
+@app.post("/download-excel/")
 async def export_to_excel(file: UploadFile = File(...)):
     images_to_process = await get_images_from_upload(file)
     all_data = []
