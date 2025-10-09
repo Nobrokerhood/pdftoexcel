@@ -20,12 +20,12 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Be specific about the allowed origins
+    allow_origins=["https://nobrokerhood.github.io"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"], # You can also make methods more specific
     allow_headers=["*"],
 )
-
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 @app.get("/")
