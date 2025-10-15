@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: pdftoexcel
+    env: python
+    buildCommand: |
+      apt-get update && apt-get install -y poppler-utils
+      pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    autoDeploy: true
