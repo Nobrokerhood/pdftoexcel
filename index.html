@@ -6,39 +6,43 @@
   <link rel="icon" href="https://www.nobrokerhood.com/favicon.ico">
   <style>
     body {
-      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: linear-gradient(135deg, #0a0a0a, #003366);
-      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #000000, #001a33);
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
+      margin: 0;
       color: #f0f2f5;
     }
+
     .container {
       background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(8px);
-      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      border-radius: 18px;
       text-align: center;
-      padding: 40px;
+      padding: 45px 40px;
       width: 90%;
       max-width: 520px;
-      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.5);
     }
+
     .logo {
-      width: 160px;
-      margin-bottom: 10px;
+      width: 190px;
+      margin-bottom: 15px;
+      filter: drop-shadow(0 0 6px rgba(0, 191, 255, 0.5));
     }
+
     h1 {
       color: #00bfff;
-      font-size: 26px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
+
     p {
       color: #dcdcdc;
-      font-size: 15px;
       margin-bottom: 20px;
     }
+
     input[type="file"] {
       border: 1px solid #00bfff;
       background: transparent;
@@ -46,45 +50,64 @@
       padding: 10px;
       border-radius: 8px;
       width: 100%;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
     }
+
     input[type="file"]::file-selector-button {
       background: #00bfff;
       color: white;
       border: none;
-      padding: 8px 12px;
+      padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
       font-weight: bold;
+      transition: 0.3s;
     }
+
     input[type="file"]::file-selector-button:hover {
       background-color: #0099cc;
     }
+
+    /* 🟡 Added hint text style */
+    .hint {
+      font-size: 13px;
+      color: #ffcc00;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+
     button {
-      background-color: #00bfff;
       color: white;
       border: none;
       padding: 12px 20px;
       border-radius: 8px;
       cursor: pointer;
       font-weight: bold;
-      margin: 5px;
-      transition: background-color 0.3s;
+      margin: 8px;
+      transition: 0.3s ease;
     }
-    button:hover {
-      background-color: #0099cc;
+
+    .primary-button {
+      background-color: #00bfff;
     }
+
     .secondary-button {
       background-color: #1877f2;
     }
-    .secondary-button:hover {
-      background-color: #166fe5;
+
+    .split-button {
+      background-color: #ff9800;
     }
+
+    button:hover {
+      transform: scale(1.05);
+    }
+
     #loader {
       display: none;
       margin-top: 20px;
-      color: #f0f2f5;
     }
+
     .spinner {
       border: 4px solid #333;
       border-top: 4px solid #00bfff;
@@ -92,119 +115,137 @@
       width: 40px;
       height: 40px;
       animation: spin 1s linear infinite;
-      display: inline-block;
-      margin-top: 15px;
+      margin: auto;
     }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
     #status {
       margin-top: 15px;
       font-weight: 600;
-    }
-    .support {
-      margin-top: 30px;
-    }
-    .support a {
-      color: #00bfff;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    .support a:hover {
-      text-decoration: underline;
-    }
-    footer {
-      margin-top: 25px;
-      font-size: 13px;
-      color: #aaa;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <img src="https://assets.nobroker.in/nb-new/public/Common/nb_logo_new.svg" alt="NoBrokerHood Logo" class="logo">
+    <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="NoBrokerHood Logo" class="logo">
     <h1>AI Document Converter</h1>
-    <p>Upload your PDF or image to convert it into Excel or CSV format — powered by Gemini AI.</p>
+    <p>Upload your PDF or image (≤10 MB) for conversion or splitting.</p>
 
     <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
 
-    <button onclick="processFile('template')">Convert to CSV (Template)</button>
+    <!-- 💡 Added user-friendly hint -->
+    <p class="hint">💡 If your PDF has more than 5 pages, please use the <b>Split PDF</b> option first.</p>
+
+    <button onclick="processFile('template')" class="primary-button">Convert to CSV (Template)</button>
     <button onclick="processFile('excel')" class="secondary-button">Convert to Excel (As-Is)</button>
+    <button onclick="splitPDF()" class="split-button">Split PDF (Large Files)</button>
 
     <div id="loader">
       <div class="spinner"></div>
-      <p>Processing your document, please wait…</p>
+      <p>Processing, please wait…</p>
     </div>
 
     <p id="status"></p>
-
-    <div class="support">
-      <p>Need help? <a href="mailto:virendra.bodele@nobroker.in">Contact IT Support</a></p>
-    </div>
-
-    <footer>© 2025 NoBrokerHood</footer>
   </div>
 
   <script>
-    async function processFile(type) {
-      const fileInput = document.getElementById('fileInput');
-      const file = fileInput.files[0];
-      const statusEl = document.getElementById('status');
-      const loaderEl = document.getElementById('loader');
+    const BASE_URL = "https://pdftoexcel-846x.onrender.com";
 
-      if (!file) {
-        statusEl.innerText = "Please select a file first.";
-        statusEl.style.color = "#ff6666";
+    async function processFile(type) {
+      const f = document.getElementById('fileInput').files[0];
+      const status = document.getElementById('status');
+      const loader = document.getElementById('loader');
+
+      if (!f) {
+        status.textContent = "Please select a file.";
+        status.style.color = "#ff6666";
         return;
       }
 
-      const formData = new FormData();
-      formData.append('file', file);
+      const fd = new FormData();
+      fd.append('file', f);
 
-      statusEl.innerText = "";
-      loaderEl.style.display = 'block';
+      status.textContent = "";
+      loader.style.display = 'block';
 
-      let endpoint = '';
-      let filename = '';
-
-      if (type === 'template') {
-        endpoint = 'https://pdftoexcel-846x.onrender.com/process-document/';
-        filename = 'converted_template.csv';
-      } else {
-        endpoint = 'https://pdftoexcel-846x.onrender.com/export-to-excel/';
-        filename = 'exported_data.xlsx';
-      }
+      let endpoint = type === 'template' ? '/process-document/' : '/export-to-excel/';
+      let filename = type === 'template' ? 'converted_template.csv' : 'exported_data.xlsx';
 
       try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
+        const res = await fetch(BASE_URL + endpoint, { method: 'POST', body: fd });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
           a.download = filename;
-          document.body.appendChild(a);
           a.click();
-          window.URL.revokeObjectURL(url);
-          statusEl.innerText = "✅ Success! Your file is downloading.";
-          statusEl.style.color = "#00ff99";
+          URL.revokeObjectURL(url);
+          status.textContent = "✅ Success! File is downloading.";
+          status.style.color = "#00ff99";
         } else {
-          const error = await response.json();
-          statusEl.innerText = `⚠️ Error: ${error.detail}`;
-          statusEl.style.color = "#ff6666";
+          const err = await res.json();
+          status.textContent = `⚠️ ${err.detail}`;
+          status.style.color = "#ff6666";
         }
-      } catch (error) {
-        console.error("Error:", error);
-        statusEl.innerText = '❌ Server error. Please try again or contact IT support.';
-        statusEl.style.color = "#ff6666";
-      } finally {
-        loaderEl.style.display = 'none';
+      } catch (e) {
+        status.textContent = "❌ Server error. Please try again.";
+        status.style.color = "#ff6666";
       }
+
+      loader.style.display = 'none';
+    }
+
+    async function splitPDF() {
+      const f = document.getElementById('fileInput').files[0];
+      const status = document.getElementById('status');
+      const loader = document.getElementById('loader');
+
+      if (!f) {
+        status.textContent = "Select a PDF file first.";
+        status.style.color = "#ff6666";
+        return;
+      }
+
+      if (!f.name.endsWith('.pdf')) {
+        status.textContent = "Only PDF files can be split.";
+        status.style.color = "#ff6666";
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('file', f);
+
+      status.textContent = "";
+      loader.style.display = 'block';
+
+      try {
+        const res = await fetch(BASE_URL + '/split-pdf/', { method: 'POST', body: fd });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'split_parts.zip';
+          a.click();
+          URL.revokeObjectURL(url);
+          status.textContent = "✅ PDF successfully split.";
+          status.style.color = "#00ff99";
+        } else {
+          const err = await res.json();
+          status.textContent = `⚠️ ${err.detail}`;
+          status.style.color = "#ff6666";
+        }
+      } catch (e) {
+        status.textContent = "❌ Error while splitting PDF.";
+        status.style.color = "#ff6666";
+      }
+
+      loader.style.display = 'none';
     }
   </script>
 </body>
