@@ -2,19 +2,20 @@ import os
 import io
 import json
 import time
+import gc
 import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 from pdf2image import convert_from_bytes
 from PIL import Image
+from PyPDF2 import PdfReader, PdfWriter
+from zipfile import ZipFile
 from dotenv import load_dotenv
-import gc
 
-# ------------------- Load Environment Variables -------------------
+# ------------------- Load .env -------------------
 load_dotenv()
-
 try:
     GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     genai.configure(api_key=GEMINI_API_KEY)
@@ -22,8 +23,8 @@ try:
 except KeyError:
     raise RuntimeError("❌ FATAL: GEMINI_API_KEY environment variable not set.")
 
-# ------------------- Initialize FastAPI -------------------
-app = FastAPI(title="NoBrokerHood PDF→Excel Converter")
+# ------------------- FastAPI App -------------------
+app = FastAPI(title="NoBrokerHood PDF→Excel & Split Tool")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,10 +37,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------- Initialize Gemini Model -------------------
+# ------------------- Gemini Model -------------------
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-# ------------------- PROMPTS -------------------
+# ------------------- Prompts -------------------
 def create_template_prompt():
     return """
     You are an expert data entry clerk. Your task is to analyze the provided image of a ledger and convert it into a specific flattened CSV format.
@@ -53,10 +54,7 @@ def create_template_prompt():
     5. If a value is missing, use null.
 
     JSON SCHEMA:
-    [{"Bill Number": "string", "Bill Date": null, "Vendor Code": null, "Due Date": null, "Narration": "string", 
-    "CGST Tax Ledger Code": null, "CGST Amount": null, "SGST Tax Ledger Code": null, "SGST Amount": null, 
-    "IGST Tax Ledger Code": null, "IGST Amount": null, "TDS Code": null, "TDS Amount": null, 
-    "Expense Code 1": "string", "Expense Amount 1": "float", "... up to 10 expense pairs"}]
+    [{"Bill Number": "string", "Bill Date": null, "Vendor Code": null, "Due Date": null, "Narration": "string", "CGST Tax Ledger Code": null, "CGST Amount": null, "SGST Tax Ledger Code": null, "SGST Amount": null, "IGST Tax Ledger Code": null, "IGST Amount": null, "TDS Code": null, "TDS Amount": null, "Expense Code 1": "string", "Expense Amount 1": "float"}]
     """
 
 def create_direct_export_prompt():
@@ -64,12 +62,11 @@ def create_direct_export_prompt():
     You are a meticulous financial auditor. Analyze the provided image of a table. Extract the data exactly as it appears.
     CRITICAL RULES:
     1. For each row, carefully associate every value with its correct column header based on visual alignment.
-    2. If a cell is visually empty or contains only a dash '-', you MUST use a `null` value. Do not invent data.
-    3. The final output must be a valid JSON array of row objects. Do not include any other text.
-    Example: [{"Header 1": "Value A", "Header 2": 123.45, "Header 3": null}]
+    2. If a cell is visually empty or contains only a dash '-', you MUST use a `null` value.
+    3. The final output must be a valid JSON array of row objects.
     """
 
-# ------------------- Retry Helper -------------------
+# ------------------- Safe Generate -------------------
 def safe_generate(prompt_list, retries=2):
     for attempt in range(retries):
         try:
@@ -79,107 +76,133 @@ def safe_generate(prompt_list, retries=2):
                 raise
             time.sleep(2)
 
-# ------------------- Memory-Optimized PDF Conversion -------------------
+# ------------------- File Handling -------------------
+MAX_FILE_SIZE_MB = 10
+
 async def get_images_from_upload(file: UploadFile):
-    """Convert PDF or image to PIL images efficiently in batches of 5 pages."""
     if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
-    
     file_bytes = await file.read()
+
+    # ✅ File size limit (10 MB)
+    if len(file_bytes) > MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File exceeds 10 MB limit. Please split first.")
 
     if file.content_type == "application/pdf":
         try:
-            all_images = []
-            # Convert PDF to images in batches of 5 pages to reduce memory usage
-            print("📄 Converting PDF pages in memory-safe batches...")
-            total_pages = convert_from_bytes(file_bytes, dpi=50, fmt="jpeg", first_page=1)
-            num_pages = len(total_pages)
-            print(f"Total pages detected: {num_pages}")
-            
-            # Batch process in chunks of 5
-            for i in range(0, num_pages, 5):
-                batch = convert_from_bytes(file_bytes, dpi=100, fmt="jpeg", 
-                                           first_page=i+1, last_page=min(i+5, num_pages))
-                for page in batch:
-                    img_rgb = page.convert("RGB")
-                    all_images.append(img_rgb)
-                    page.close()
-                gc.collect()  # Force garbage collection to free memory
-                print(f"Processed batch {i//5 + 1} ({len(all_images)} images so far)")
-
-            if not all_images:
-                raise HTTPException(status_code=400, detail="No pages could be processed from the PDF.")
-            return all_images
+            images = []
+            for page in convert_from_bytes(file_bytes, dpi=100, fmt="jpeg"):
+                images.append(page.convert("RGB"))
+                page.close()
+            gc.collect()
+            return images
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"PDF processing failed: {e}")
     else:
         return [Image.open(io.BytesIO(file_bytes)).convert("RGB")]
 
-# ------------------- CSV Template Endpoint -------------------
+# ------------------- CSV Endpoint -------------------
 @app.post("/process-document/")
 async def process_document(file: UploadFile = File(...)):
-    images_to_process = await get_images_from_upload(file)
-    all_rows = []
+    images = await get_images_from_upload(file)
+    rows = []
 
-    for image in images_to_process:
+    for img in images:
         try:
-            prompt = create_template_prompt()
-            response = safe_generate([prompt, image])
-            page_data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-            all_rows.extend(page_data)
+            resp = safe_generate([create_template_prompt(), img])
+            data = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
+            rows.extend(data)
         except Exception as e:
-            print(f"Error processing page for template: {e}")
-            continue
+            print("Error:", e)
         finally:
-            image.close()
+            img.close()
             gc.collect()
 
-    if not all_rows:
-        raise HTTPException(status_code=400, detail="No data could be processed for the template.")
+    if not rows:
+        raise HTTPException(status_code=400, detail="No data could be processed.")
 
-    df = pd.DataFrame(all_rows)
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
+    df = pd.DataFrame(rows)
+    buf = io.StringIO()
+    df.to_csv(buf, index=False)
     return StreamingResponse(
-        iter([csv_buffer.getvalue()]),
+        iter([buf.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=converted_template.csv"}
     )
 
-# ------------------- Excel Export Endpoint -------------------
+# ------------------- Excel Endpoint -------------------
 @app.post("/export-to-excel/")
 async def export_to_excel(file: UploadFile = File(...)):
-    images_to_process = await get_images_from_upload(file)
+    images = await get_images_from_upload(file)
     all_data = []
 
-    for image in images_to_process:
+    for img in images:
         try:
-            prompt = create_direct_export_prompt()
-            response = safe_generate([prompt, image])
-            page_data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
-            all_data.extend(page_data)
+            resp = safe_generate([create_direct_export_prompt(), img])
+            data = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
+            all_data.extend(data)
         except Exception as e:
-            print(f"Error processing page for excel: {e}")
-            continue
+            print("Error:", e)
         finally:
-            image.close()
+            img.close()
             gc.collect()
 
     if not all_data:
-        raise HTTPException(status_code=400, detail="No data could be extracted for Excel.")
+        raise HTTPException(status_code=400, detail="No data extracted for Excel.")
 
     df = pd.DataFrame(all_data)
-    excel_buffer = io.BytesIO()
-    df.to_excel(excel_buffer, index=False, sheet_name="Extracted Data", engine="openpyxl")
-    excel_buffer.seek(0)
-
+    excel_buf = io.BytesIO()
+    df.to_excel(excel_buf, index=False, sheet_name="Extracted Data", engine="openpyxl")
+    excel_buf.seek(0)
     return StreamingResponse(
-        excel_buffer,
+        excel_buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=exported_data.xlsx"}
     )
 
-# ------------------- Root Health Route -------------------
+# ------------------- PDF Splitter Endpoint -------------------
+@app.post("/split-pdf/")
+async def split_pdf(file: UploadFile = File(...), pages_per_file: int = 5):
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    file_bytes = await file.read()
+
+    if len(file_bytes) > MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File exceeds 10 MB limit.")
+
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        total = len(reader.pages)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="Empty PDF file.")
+
+        parts = []
+        for start in range(0, total, pages_per_file):
+            writer = PdfWriter()
+            for i in range(start, min(start + pages_per_file, total)):
+                writer.add_page(reader.pages[i])
+            part_io = io.BytesIO()
+            writer.write(part_io)
+            part_io.seek(0)
+            parts.append((f"part_{start//pages_per_file + 1}.pdf", part_io))
+            gc.collect()
+
+        zip_buf = io.BytesIO()
+        with ZipFile(zip_buf, "w") as z:
+            for name, fdata in parts:
+                z.writestr(name, fdata.read())
+        zip_buf.seek(0)
+
+        return StreamingResponse(
+            zip_buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": "attachment; filename=split_parts.zip"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF splitting failed: {e}")
+
+# ------------------- Health Route -------------------
 @app.get("/")
 def root():
-    return {"message": "✅ NoBrokerHood PDF→Excel API is running successfully on Render."}
+    return {"message": "✅ NoBrokerHood PDF→Excel & Split API running on Render."}
