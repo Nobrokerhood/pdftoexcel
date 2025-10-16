@@ -10,6 +10,7 @@ import google.generativeai as genai
 from pdf2image import convert_from_bytes
 from PIL import Image
 from dotenv import load_dotenv
+import gc
 
 # ------------------- Load Environment Variables -------------------
 load_dotenv()
@@ -24,7 +25,6 @@ except KeyError:
 # ------------------- Initialize FastAPI -------------------
 app = FastAPI(title="NoBrokerHood PDF→Excel Converter")
 
-# ✅ Explicitly allow your GitHub Pages frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -39,7 +39,7 @@ app.add_middleware(
 # ------------------- Initialize Gemini Model -------------------
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-# ------------------- Original PROMPTS -------------------
+# ------------------- PROMPTS -------------------
 def create_template_prompt():
     return """
     You are an expert data entry clerk. Your task is to analyze the provided image of a ledger and convert it into a specific flattened CSV format.
@@ -53,7 +53,10 @@ def create_template_prompt():
     5. If a value is missing, use null.
 
     JSON SCHEMA:
-    [{"Bill Number": "string", "Bill Date": null, "Vendor Code": null, "Due Date": null, "Narration": "string", "CGST Tax Ledger Code": null, "CGST Amount": null, "SGST Tax Ledger Code": null, "SGST Amount": null, "IGST Tax Ledger Code": null, "IGST Amount": null, "TDS Code": null, "TDS Amount": null, "Expense Code 1": "string", "Expense Amount 1": "float", "... up to 10 expense pairs"}]
+    [{"Bill Number": "string", "Bill Date": null, "Vendor Code": null, "Due Date": null, "Narration": "string", 
+    "CGST Tax Ledger Code": null, "CGST Amount": null, "SGST Tax Ledger Code": null, "SGST Amount": null, 
+    "IGST Tax Ledger Code": null, "IGST Amount": null, "TDS Code": null, "TDS Amount": null, 
+    "Expense Code 1": "string", "Expense Amount 1": "float", "... up to 10 expense pairs"}]
     """
 
 def create_direct_export_prompt():
@@ -76,28 +79,46 @@ def safe_generate(prompt_list, retries=2):
                 raise
             time.sleep(2)
 
-# ------------------- File/Image Handling -------------------
-async def get_image_from_upload(file: UploadFile):
-    if not file.content_type in ["image/jpeg", "image/png", "application/pdf"]:
+# ------------------- Memory-Optimized PDF Conversion -------------------
+async def get_images_from_upload(file: UploadFile):
+    """Convert PDF or image to PIL images efficiently in batches of 5 pages."""
+    if file.content_type not in ["image/jpeg", "image/png", "application/pdf"]:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
-
+    
     file_bytes = await file.read()
 
     if file.content_type == "application/pdf":
         try:
-            images = convert_from_bytes(file_bytes)
-            if not images:
-                raise HTTPException(status_code=400, detail="Could not extract images from PDF.")
-            return images
+            all_images = []
+            # Convert PDF to images in batches of 5 pages to reduce memory usage
+            print("📄 Converting PDF pages in memory-safe batches...")
+            total_pages = convert_from_bytes(file_bytes, dpi=50, fmt="jpeg", first_page=1)
+            num_pages = len(total_pages)
+            print(f"Total pages detected: {num_pages}")
+            
+            # Batch process in chunks of 5
+            for i in range(0, num_pages, 5):
+                batch = convert_from_bytes(file_bytes, dpi=100, fmt="jpeg", 
+                                           first_page=i+1, last_page=min(i+5, num_pages))
+                for page in batch:
+                    img_rgb = page.convert("RGB")
+                    all_images.append(img_rgb)
+                    page.close()
+                gc.collect()  # Force garbage collection to free memory
+                print(f"Processed batch {i//5 + 1} ({len(all_images)} images so far)")
+
+            if not all_images:
+                raise HTTPException(status_code=400, detail="No pages could be processed from the PDF.")
+            return all_images
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"PDF processing failed: {e}")
     else:
-        return [Image.open(io.BytesIO(file_bytes))]
+        return [Image.open(io.BytesIO(file_bytes)).convert("RGB")]
 
 # ------------------- CSV Template Endpoint -------------------
 @app.post("/process-document/")
 async def process_document(file: UploadFile = File(...)):
-    images_to_process = await get_image_from_upload(file)
+    images_to_process = await get_images_from_upload(file)
     all_rows = []
 
     for image in images_to_process:
@@ -109,6 +130,9 @@ async def process_document(file: UploadFile = File(...)):
         except Exception as e:
             print(f"Error processing page for template: {e}")
             continue
+        finally:
+            image.close()
+            gc.collect()
 
     if not all_rows:
         raise HTTPException(status_code=400, detail="No data could be processed for the template.")
@@ -125,7 +149,7 @@ async def process_document(file: UploadFile = File(...)):
 # ------------------- Excel Export Endpoint -------------------
 @app.post("/export-to-excel/")
 async def export_to_excel(file: UploadFile = File(...)):
-    images_to_process = await get_image_from_upload(file)
+    images_to_process = await get_images_from_upload(file)
     all_data = []
 
     for image in images_to_process:
@@ -137,6 +161,9 @@ async def export_to_excel(file: UploadFile = File(...)):
         except Exception as e:
             print(f"Error processing page for excel: {e}")
             continue
+        finally:
+            image.close()
+            gc.collect()
 
     if not all_data:
         raise HTTPException(status_code=400, detail="No data could be extracted for Excel.")
