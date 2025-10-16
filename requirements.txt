@@ -1,6 +1,9 @@
-fastapi[all]
-google-generativeai
+fastapi
+uvicorn
 pandas
-Pillow
+pillow
+google-generativeai
 pdf2image
+python-dotenv
 openpyxl
+PyPDF2
