@@ -5,59 +5,17 @@
   <title>NoBrokerHood | AI Document Converter</title>
   <link rel="icon" href="https://www.nobrokerhood.com/favicon.ico">
   <style>
-    /* --- MODIFIED BODY STYLE --- */
     body {
       font-family: "Segoe UI", Roboto, sans-serif;
       background: linear-gradient(135deg, #000000, #001a33);
-      display: flex; /* <-- This is the main layout change */
+      display: flex;
+      justify-content: center;
+      align-items: center;
       min-height: 100vh;
       margin: 0;
       color: #f0f2f5;
     }
 
-    /* --- NEW SIDEBAR STYLES --- */
-    .sidebar {
-      width: 220px;
-      background: #001a33;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 20px;
-      box-shadow: 2px 0 10px rgba(0,0,0,0.5);
-      height: 100vh;
-      flex-shrink: 0; /* Prevents sidebar from shrinking */
-    }
-    .sidebar img { 
-      width: 120px; 
-      margin-bottom: 10px; 
-    }
-    .sidebar a { 
-      color: #dbefff; 
-      margin: 10px 0; 
-      text-decoration: none; 
-      font-weight: bold;
-      font-size: 1.1rem;
-    }
-    .sidebar a.active { 
-      color: #00ff99; /* The highlight color */
-    }
-    /* --- END NEW STYLES --- */
-
-
-    /* --- NEW MAIN CONTENT WRAPPER --- */
-    /* This new div centers your original container */
-    .main-content {
-      flex: 1; /* Takes up remaining space */
-      display: flex; /* Re-applies the centering */
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      overflow-y: auto; /* Allows scrolling if content is too big */
-      padding: 20px; /* Adds some padding */
-      box-sizing: border-box; /* Includes padding in height/width */
-    }
-
-    /* --- YOUR ORIGINAL STYLES (UNCHANGED) --- */
     .container {
       background: rgba(255, 255, 255, 0.08);
       backdrop-filter: blur(10px);
@@ -68,19 +26,23 @@
       max-width: 520px;
       box-shadow: 0 4px 25px rgba(0, 0, 0, 0.5);
     }
+
     .logo {
       width: 190px;
       margin-bottom: 15px;
       filter: drop-shadow(0 0 6px rgba(0, 191, 255, 0.5));
     }
+
     h1 {
       color: #00bfff;
       margin-bottom: 12px;
     }
+
     p {
       color: #dcdcdc;
       margin-bottom: 20px;
     }
+
     input[type="file"] {
       border: 1px solid #00bfff;
       background: transparent;
@@ -90,6 +52,7 @@
       width: 100%;
       margin-bottom: 10px;
     }
+
     input[type="file"]::file-selector-button {
       background: #00bfff;
       color: white;
@@ -100,15 +63,19 @@
       font-weight: bold;
       transition: 0.3s;
     }
+
     input[type="file"]::file-selector-button:hover {
       background-color: #0099cc;
     }
+
+    /* 🟡 Added hint text style */
     .hint {
       font-size: 13px;
       color: #ffcc00;
       margin-bottom: 20px;
       font-style: italic;
     }
+
     button {
       color: white;
       border: none;
@@ -119,22 +86,28 @@
       margin: 8px;
       transition: 0.3s ease;
     }
+
     .primary-button {
       background-color: #00bfff;
     }
+
     .secondary-button {
       background-color: #1877f2;
     }
+
     .split-button {
       background-color: #ff9800;
     }
+
     button:hover {
       transform: scale(1.05);
     }
+
     #loader {
       display: none;
       margin-top: 20px;
     }
+
     .spinner {
       border: 4px solid #333;
       border-top: 4px solid #00bfff;
@@ -144,10 +117,12 @@
       animation: spin 1s linear infinite;
       margin: auto;
     }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
     #status {
       margin-top: 15px;
       font-weight: 600;
@@ -157,35 +132,33 @@
 <body>
   
   <div class="sidebar">
-    <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="logo">
-    <a href="index.html" class="active">📄 OCR Tool</a> 
-    <a href="voice.html">🎙️ Voice Tool</a>
+  <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="logo">
+  <a href="index.html" class="active">📄 OCR Tool</a> 
+  <a href="voice.html">🎙️ Voice Tool</a>
   </div>
-  
-  <div class="main-content">
-  
-    <div class="container">
-      <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="NoBrokerHood Logo" class="logo">
-      <h1>AI Document Converter</h1>
-      <p>Upload your PDF or image (≤10 MB) for conversion or splitting.</p>
+  <div class="container">
+    <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="NoBrokerHood Logo" class="logo">
+    <h1>AI Document Converter</h1>
+    <p>Upload your PDF or image (≤10 MB) for conversion or splitting.</p>
 
-      <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
+    <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
 
-      <p class="hint">💡 If your PDF has more than 5 pages, please use the <b>Split PDF</b> option first.</p>
+    <!-- 💡 Added user-friendly hint -->
+    <p class="hint">💡 If your PDF has more than 5 pages, please use the <b>Split PDF</b> option first.</p>
 
-      <button onclick="processFile('template')" class="primary-button">Convert to CSV (Template)</button>
-      <button onclick="processFile('excel')" class="secondary-button">Convert to Excel (As-Is)</button>
-      <button onclick="splitPDF()" class="split-button">Split PDF (Large Files)</button>
+    <button onclick="processFile('template')" class="primary-button">Convert to CSV (Template)</button>
+    <button onclick="processFile('excel')" class="secondary-button">Convert to Excel (As-Is)</button>
+    <button onclick="splitPDF()" class="split-button">Split PDF (Large Files)</button>
 
-      <div id="loader">
-        <div class="spinner"></div>
-        <p>Processing, please wait…</p>
-      </div>
-
-      <p id="status"></p>
+    <div id="loader">
+      <div class="spinner"></div>
+      <p>Processing, please wait…</p>
     </div>
-    
-  </div> <script>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
     const BASE_URL = "https://pdftoexcel-846x.onrender.com";
 
     async function processFile(type) {
@@ -283,3 +256,4 @@
   </script>
 </body>
 </html>
+
