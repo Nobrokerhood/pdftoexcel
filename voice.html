@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+  // SECURITY CHECK
+  const user = sessionStorage.getItem("nobroker_user");
+  if (!user) {
+    window.location.href = "index.html"; // Kick them back to login
+  }
+  </script>
   <meta charset="UTF-8">
   <title>NoBrokerHood | Voice to Excel</title>
   <link rel="icon" href="https://www.nobrokerhood.com/favicon.ico">
@@ -88,14 +95,14 @@
 <body>
   <div class="app">
     <div class="sidebar">
-      <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="logo">
-      <h3>NoBrokerHood</h3>
-      
-      <a href="index.html">📄 PDF to Excel</a>
-      <a href="voice.html" class="active">🎙️ Voice Typing App</a>
-      
-      <div style="flex:1"></div>
+    <img src="https://www.nobrokerhood.com/assets/images/logo-white.png" alt="logo">
+    <a href="ocr.html">📄 OCR Tool</a>
+    <a href="voice.html" class="active">🎙️ Voice Tool</a>
+    
+    <div style="margin-top: auto; margin-bottom: 20px;">
+      <a href="#" onclick="logout()" style="color: #ff4444; font-size: 0.9rem; text-align: center; display: block; width: 100%;">Logout</a>
     </div>
+  </div>
 
     <div class="main">
       <div class="container">
@@ -289,6 +296,10 @@
       uploadBackupLabel.classList.remove('hidden');
       audioBlob = null;
       audioChunks = [];
+    }
+    function logout() {
+      sessionStorage.clear();
+      window.location.href = "index.html";
     }
   </script>
 </body>
