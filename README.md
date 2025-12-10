@@ -8,5 +8,5 @@ open and and access the html and to work <br>
 **http://localhost:5000/index.html**
 <img width="987" height="285" alt="image" src="https://github.com/user-attachments/assets/ae16b89d-214d-4693-aea3-8c9305d587c2" />
 
-befor deploying the code to rendar update the basic_URL OCR.HTML file <br>
+befor deploying the code to rendar update the basic_URL OCR.HTML file current code "const BASE_URL = "http://localhost:8000";<br>
 delete the function **# ------------------- CORS for Local Dev -------------------**
