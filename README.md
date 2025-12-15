@@ -10,3 +10,29 @@ open and and access the html and to work <br>
 
 befor deploying the code to rendar update the basic_URL OCR.HTML file current code "const BASE_URL = "http://localhost:8000";<br>
 delete the function **# ------------------- CORS for Local Dev -------------------**
+
+
+use this code to run this code on local
+
+# ------------------- CORS for Local Dev -------------------
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Add / update CORS settings for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5000",   # where you serve ocr.html (your screenshots)
+        "http://127.0.0.1:5000",
+        "http://localhost:8000",   # backend origin (if frontend served same origin)
+        "http://127.0.0.1:8000",
+        "http://localhost:5500",   # common dev servers
+        "http://127.0.0.1:5500",
+        # "https://nobrokerhood.github.io",   # keep production if needed
+        # "https://nobrokerhood.github.io/pdftoexcel",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
