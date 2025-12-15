@@ -12,7 +12,7 @@ befor deploying the code to rendar update the basic_URL OCR.HTML file current co
 delete the function **# ------------------- CORS for Local Dev -------------------**
 
 
-use this code to run this code on local
+#use this code to run this code on local
 
 # ------------------- CORS for Local Dev -------------------
 
