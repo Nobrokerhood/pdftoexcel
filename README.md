@@ -12,7 +12,7 @@ befor deploying the code to rendar update the basic_URL OCR.HTML file current co
 delete the function **# ------------------- CORS for Local Dev -------------------**
 
 
-#use this code to run this code on local
+#**use this code to run this code on local Below**
 
 # ------------------- CORS for Local Dev -------------------
 
@@ -36,3 +36,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+you will get the login audit and app usage report new code update <br>
+file name :- API_Usage_Report <br>
+
+file name :- Login_Audit_Report
