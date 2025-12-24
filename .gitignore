@@ -1,4 +1,11 @@
+# Secrets
 service_account.json
-.venv/
-__pycache__/
 .env
+
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
