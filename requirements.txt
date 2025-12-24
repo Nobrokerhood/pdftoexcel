@@ -8,3 +8,5 @@ python-dotenv
 openpyxl
 PyPDF2
 python-multipart
+gspread
+google-auth
