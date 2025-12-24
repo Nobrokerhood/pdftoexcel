@@ -7,12 +7,23 @@ import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 import google.generativeai as genai
 from pdf2image import convert_from_bytes
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 from zipfile import ZipFile
 from dotenv import load_dotenv
+from pydantic import BaseModel
+from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
+from fastapi import Request
+
+# ------------------- Logging Setup -------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 # ------------------- Load .env -------------------
 load_dotenv()
@@ -36,6 +47,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ------------------- Google Sheet Login Logger -------------------
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
+service_account_info = json.loads(
+    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+)
+
+GS_CREDS = Credentials.from_service_account_info(
+    service_account_info,
+    scopes=SCOPES
+)
+
+gs_client = gspread.authorize(GS_CREDS)
+login_sheet = gs_client.open("Login_Audit_Report").sheet1
+
+
+class LoginLog(BaseModel):
+    email: str
+    name: str | None = ""
+    login_time: str
 
 # ------------------- Gemini Model -------------------
 model = genai.GenerativeModel("gemini-2.5-flash")
@@ -202,7 +238,34 @@ async def split_pdf(file: UploadFile = File(...), pages_per_file: int = 5):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF splitting failed: {e}")
 
+
+# ------------------- Login Audit Endpoint -------------------
+@app.post("/login-log")
+async def log_login(data: LoginLog, request: Request):
+    try:
+        ip = request.client.host if request.client else "unknown"
+        user_agent = request.headers.get("user-agent", "unknown")
+
+        login_sheet.append_row([
+            data.email,
+            data.name,
+            data.login_time,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ip,
+            user_agent,
+            "SUCCESS"
+        ])
+
+        return {"status": "logged"}
+
+    except Exception as e:
+        logger.error(f"Login logging failed: {e}")
+        raise HTTPException(status_code=500, detail="Login logging failed")
+
+
 # ------------------- Health Route -------------------
 @app.get("/")
 def root():
     return {"message": "✅ NoBrokerHood PDF→Excel & Split API running on Render."}
+
+
