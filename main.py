@@ -37,6 +37,44 @@ except KeyError:
 # ------------------- FastAPI App -------------------
 app = FastAPI(title="NoBrokerHood PDF→Excel & Split Tool")
 
+# ------------------- API Usage Logger Middleware -------------------
+@app.middleware("http")
+async def api_usage_logger(request: Request, call_next):
+    if request.url.path == "/login-log":
+        return await call_next(request)
+
+    start_time = time.time()
+    status = "OK"
+    try:
+        response = await call_next(request)
+        if response.status_code >= 400:
+            status = "FAIL"
+        return response
+    except Exception:
+        status = "FAIL"
+        raise
+
+    finally:
+        try:
+            process_time = round(time.time() - start_time, 3)
+            ip = request.client.host if request.client else "unknown"
+            user_agent = request.headers.get("user-agent", "unknown")
+
+            usage_sheet.append_row([
+                request.method,
+                request.url.path,
+                status,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                process_time,
+                ip,
+                user_agent
+            ])
+
+        except Exception as log_error:
+            logger.error(f"Usage logging failed: {log_error}")
+
+
+# ------------------- CORS for Production -------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -49,7 +87,6 @@ app.add_middleware(
 )
 
 # ------------------- Google Sheet Login Logger -------------------
-
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
@@ -65,8 +102,8 @@ GS_CREDS = Credentials.from_service_account_info(
 )
 
 gs_client = gspread.authorize(GS_CREDS)
-login_sheet = gs_client.open("Login_Audit_Report").sheet1
-
+login_sheet = gs_client.open("Login_Audit_Report").sheet1 # ------------------- Google Sheet Login Logger -------------------
+usage_sheet = gs_client.open("API_Usage_Report").sheet1  # ------------------- API Usage Logger -------------------
 
 class LoginLog(BaseModel):
     email: str
