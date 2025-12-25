@@ -45,6 +45,7 @@ async def api_usage_logger(request: Request, call_next):
 
     start_time = time.time()
     status = "OK"
+    email = request.headers.get("X-User-Email", "anonymous")
     try:
         response = await call_next(request)
         if response.status_code >= 400:
@@ -61,6 +62,7 @@ async def api_usage_logger(request: Request, call_next):
             user_agent = request.headers.get("user-agent", "unknown")
 
             usage_sheet.append_row([
+                email,
                 request.method,
                 request.url.path,
                 status,
