@@ -198,7 +198,8 @@
     
   </div> <script>
     const BASE_URL = "https://pdftoexcel-846x.onrender.com";
-
+    const USER_EMAIL = sessionStorage.getItem("nobroker_user");
+    
     async function processFile(type) {
       const f = document.getElementById('fileInput').files[0];
       const status = document.getElementById('status');
@@ -220,7 +221,8 @@
       let filename = type === 'template' ? 'converted_template.csv' : 'exported_data.xlsx';
 
       try {
-        const res = await fetch(BASE_URL + endpoint, { method: 'POST', body: fd });
+        const res = await fetch(BASE_URL + endpoint, {
+        method: 'POST',headers: {"X-User-Email": USER_EMAIL || "anonymous"},body: fd});
         if (res.ok) {
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
@@ -268,8 +270,9 @@
       loader.style.display = 'block';
 
       try {
-        const res = await fetch(BASE_URL + '/split-pdf/', { method: 'POST', body: fd });
-        if (res.ok) {
+          const res = await fetch(BASE_URL + endpoint, {
+          method: 'POST',headers: {"X-User-Email": USER_EMAIL || "anonymous"},body: fd});
+          if (res.ok) {
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
