@@ -246,54 +246,63 @@
       loader.style.display = 'none';
     }
 
-    async function splitPDF() {
-      const f = document.getElementById('fileInput').files[0];
-      const status = document.getElementById('status');
-      const loader = document.getElementById('loader');
+async function splitPDF() {
+  const f = document.getElementById('fileInput').files[0];
+  const status = document.getElementById('status');
+  const loader = document.getElementById('loader');
 
-      if (!f) {
-        status.textContent = "Select a PDF file first.";
-        status.style.color = "#ff6666";
-        return;
-      }
+  if (!f) {
+    status.textContent = "Select a PDF file first.";
+    status.style.color = "#ff6666";
+    return;
+  }
 
-      if (!f.name.endsWith('.pdf')) {
-        status.textContent = "Only PDF files can be split.";
-        status.style.color = "#ff6666";
-        return;
-      }
+  if (!f.name.toLowerCase().endsWith('.pdf')) {
+    status.textContent = "Only PDF files can be split.";
+    status.style.color = "#ff6666";
+    return;
+  }
 
-      const fd = new FormData();
-      fd.append('file', f);
+  const fd = new FormData();
+  fd.append('file', f);
 
-      status.textContent = "";
-      loader.style.display = 'block';
+  status.textContent = "";
+  loader.style.display = 'block';
 
-      try {
-          const res = await fetch(BASE_URL + endpoint, {
-          method: 'POST',headers: {"X-User-Email": USER_EMAIL || "anonymous"},body: fd});
-          if (res.ok) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'split_parts.zip';
-          a.click();
-          URL.revokeObjectURL(url);
-          status.textContent = "✅ PDF successfully split.";
-          status.style.color = "#00ff99";
-        } else {
-          const err = await res.json();
-          status.textContent = `⚠️ ${err.detail}`;
-          status.style.color = "#ff6666";
-        }
-      } catch (e) {
-        status.textContent = "❌ Error while splitting PDF.";
-        status.style.color = "#ff6666";
-      }
+  try {
+    const res = await fetch(BASE_URL + "/split-pdf/", {
+      method: "POST",
+      headers: {
+        "X-User-Email": USER_EMAIL || "anonymous"
+      },
+      body: fd
+    });
 
-      loader.style.display = 'none';
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "split_parts.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+
+      status.textContent = "✅ PDF successfully split.";
+      status.style.color = "#00ff99";
+    } else {
+      const err = await res.json();
+      status.textContent = `⚠️ ${err.detail || "Split failed"}`;
+      status.style.color = "#ff6666";
     }
+  } catch (e) {
+    console.error(e);
+    status.textContent = "❌ Error while splitting PDF.";
+    status.style.color = "#ff6666";
+  }
+
+  loader.style.display = "none";
+}
+
     function logout() {
       sessionStorage.clear();
       window.location.href = "index.html";
