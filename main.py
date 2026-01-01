@@ -237,9 +237,7 @@ async def export_to_excel(file: UploadFile = File(...)):
 
 # ------------------- PDF Splitter Endpoint -------------------
 @app.post("/split-pdf/")
-async def split_pdf(file: UploadFile = File(...), 
-                    pages_per_file: int = from (5)
-                   ):
+async def split_pdf(file: UploadFile = File(...), pages_per_file: int = 5):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
 
