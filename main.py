@@ -132,15 +132,26 @@ def create_template_prompt():
     [{"Bill Number": "string", "Bill Date": null, "Vendor Code": null, "Due Date": null, "Narration": "string", "CGST Tax Ledger Code": null, "CGST Amount": null, "SGST Tax Ledger Code": null, "SGST Amount": null, "IGST Tax Ledger Code": null, "IGST Amount": null, "TDS Code": null, "TDS Amount": null, "Expense Code 1": "string", "Expense Amount 1": "float"}]
     """
 
-def create_direct_export_prompt():
-    return """
+def create_direct_export_prompt(expected_columns=None):
+    columns_str = ""
+    if expected_columns:
+        columns_str = f"EXPECTED COLUMNS (use these exact names and order): {', '.join(expected_columns)}\n"
+    
+    return f"""
     You are a meticulous financial auditor. Analyze the provided image of a table. Extract the data exactly as it appears.
+    
+    {columns_str}
+    
     CRITICAL RULES:
-    1. For each row, carefully associate every value with its correct column header based on visual alignment.
-    2. If a cell is visually empty or contains only a dash '-', you MUST use a `null` value.
-    3. The final output must be a valid JSON array of row objects.
+    1. Extract ALL visible rows and columns from the table.
+    2. For each row, carefully associate every value with its correct column header based on visual alignment.
+    3. If a cell is visually empty or contains only a dash '-', you MUST use a null value.
+    4. IMPORTANT: Always maintain consistent column order across all rows. Use the EXACT same column names and order from the first row for all subsequent rows.
+    5. The final output must be a valid JSON array of row objects with consistent structure.
+    6. Do not skip any rows - extract every single row visible in the table.
+    7. Do not add or remove columns between rows - every row must have identical keys in identical order.
+    8. Return ONLY the JSON array, no additional text.
     """
-
 # ------------------- Safe Generate -------------------
 def safe_generate(prompt_list, retries=2):
     for attempt in range(retries):
@@ -210,14 +221,36 @@ async def process_document(file: UploadFile = File(...)):
 async def export_to_excel(file: UploadFile = File(...)):
     images = await get_images_from_upload(file)
     all_data = []
+    unified_columns = None
+    page_count = 0
 
-    for img in images:
+    for idx, img in enumerate(images):
         try:
-            resp = safe_generate([create_direct_export_prompt(), img])
+            page_count += 1
+            # Pass expected columns to prompt to maintain consistency
+            prompt = create_direct_export_prompt(unified_columns)
+            resp = safe_generate([prompt, img])
             data = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
-            all_data.extend(data)
+            
+            logger.info(f"Page {page_count}: Extracted {len(data)} rows")
+            
+            # Normalize columns on first page
+            if unified_columns is None and data:
+                unified_columns = list(data[0].keys())
+                logger.info(f"Unified columns set: {unified_columns}")
+            
+            # Ensure all rows have the same columns in the same order
+            if unified_columns:
+                normalized_data = []
+                for row in data:
+                    normalized_row = {col: row.get(col, None) for col in unified_columns}
+                    normalized_data.append(normalized_row)
+                all_data.extend(normalized_data)
+                logger.info(f"Page {page_count}: After normalization, {len(normalized_data)} rows added (Total: {len(all_data)})")
+            else:
+                all_data.extend(data)
         except Exception as e:
-            print("Error:", e)
+            logger.error(f"Error processing page {page_count}: {e}")
         finally:
             img.close()
             gc.collect()
@@ -225,7 +258,13 @@ async def export_to_excel(file: UploadFile = File(...)):
     if not all_data:
         raise HTTPException(status_code=400, detail="No data extracted for Excel.")
 
+    logger.info(f"Total data collected: {len(all_data)} rows with {len(unified_columns) if unified_columns else 0} columns")
+    
     df = pd.DataFrame(all_data)
+    
+    # Fill NaN values with empty strings for better Excel appearance
+    df = df.fillna("")
+    
     excel_buf = io.BytesIO()
     df.to_excel(excel_buf, index=False, sheet_name="Extracted Data", engine="openpyxl")
     excel_buf.seek(0)
