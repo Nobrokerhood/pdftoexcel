@@ -94,14 +94,15 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-service_account_info = json.loads(
-    os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-)
-
-GS_CREDS = Credentials.from_service_account_info(
-    service_account_info,
-    scopes=SCOPES
-)
+if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
+    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    GS_CREDS = Credentials.from_service_account_info(service_account_info, scopes=SCOPES)
+else:
+    SERVICE_ACCOUNT_FILE = "/home/nobroker-lt3492/Downloads/GEN-AI/pdftoexcel/service_account.json"
+    GS_CREDS = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=SCOPES
+    )
 
 gs_client = gspread.authorize(GS_CREDS)
 login_sheet = gs_client.open("Login_Audit_Report").sheet1 # ------------------- Google Sheet Login Logger -------------------
