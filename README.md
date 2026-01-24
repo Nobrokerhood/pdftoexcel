@@ -14,12 +14,12 @@ delete the function **# ------------------- CORS for Local Dev -----------------
 
 #**use this code to run this code on local Below**
 
-# ------------------- CORS for Local Dev -------------------
+#------------------- CORS for Local Dev -------------------
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Add / update CORS settings for local development
+#Add / update CORS settings for local development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
