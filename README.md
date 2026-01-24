@@ -50,3 +50,13 @@ file name :- Login_Audit_Report
 # **Login Page**
 
 <img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/ca3689a2-348d-4a07-b62a-0bc313cf0378" />
+
+#**Docs OCR Page**
+
+<img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/cc890423-9d24-41eb-aeb7-ab772a13bae7" />
+
+#**🎙️ Voice to Excel Entry**
+
+<img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/1e72a741-ccd6-4edd-9e25-4d1df3763263" />
+
+
