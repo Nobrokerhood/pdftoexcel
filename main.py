@@ -37,6 +37,10 @@ except KeyError:
 # ------------------- FastAPI App -------------------
 app = FastAPI(title="NoBrokerHood PDF→Excel & Split Tool")
 
+#------------------- import and include KB router (modular)-----------------
+from kb.kb_service import router as kb_router
+app.include_router(kb_router)
+
 # ------------------- API Usage Logger Middleware -------------------
 @app.middleware("http")
 async def api_usage_logger(request: Request, call_next):
