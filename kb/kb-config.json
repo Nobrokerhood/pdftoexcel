@@ -1,0 +1,17 @@
+{
+  "name": "Sample KB - Project Docs",
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Statement Overview",
+      "text": "This is a short example text representing extracted content from your PDFs or transcripts. It contains example sentences that the local KB search can return.",
+      "url": ""
+    },
+    {
+      "id": "doc2",
+      "title": "How the billing works",
+      "text": "Billing cycles are monthly. Payments are recorded and available in the statement. Use the table to find transaction details.",
+      "url": ""
+    }
+  ]
+}
