@@ -1,17 +1,62 @@
-{
-  "name": "Sample KB - Project Docs",
-  "documents": [
-    {
-      "id": "doc1",
-      "title": "Statement Overview",
-      "text": "This is a short example text representing extracted content from your PDFs or transcripts. It contains example sentences that the local KB search can return.",
-      "url": ""
-    },
-    {
-      "id": "doc2",
-      "title": "How the billing works",
-      "text": "Billing cycles are monthly. Payments are recorded and available in the statement. Use the table to find transaction details.",
-      "url": ""
-    }
-  ]
-}
+[
+  {
+    "id": "doc001",
+    "source": "NoBrokerHood ERP User Manual v2.1",
+    "text": "The NoBrokerHood ERP system is designed for efficient society management. It supports multiple billing cycles including monthly, quarterly, semi-annual, and annual billing. To configure your billing cycle, navigate to Settings > Billing > Configuration. The system automatically generates invoices based on the selected cycle and sends notifications to residents 7 days before the due date. Late payment penalties can be configured as a percentage or fixed amount."
+  },
+  {
+    "id": "doc002",
+    "source": "Maintenance Charge Calculation Guide",
+    "text": "Maintenance charges are calculated based on the carpet area of each flat plus a proportionate share of common area charges. The formula is: Total Maintenance = (Carpet Area × Rate per sq ft) + (Common Area Share). Common area share is calculated as (Flat Area / Total Society Area) × Total Common Area Expenses. Monthly maintenance typically includes: building repairs, water charges, electricity for common areas, security salaries, and housekeeping expenses."
+  },
+  {
+    "id": "doc003",
+    "source": "Payment Policy Document",
+    "text": "All maintenance payments are due by the 10th of each month. A grace period of 5 days is provided until the 15th. After the 15th, a late payment penalty of 2% per month applies. Residents can pay through multiple channels: online payment portal, bank transfer, cheque deposit, or cash at the management office. Online payments are processed instantly and receipts are generated automatically. For recurring payments, residents can set up auto-debit from their bank accounts."
+  },
+  {
+    "id": "doc004",
+    "source": "Facility Booking Guide",
+    "text": "Residents can book common facilities through the NoBrokerHood app or website. Available facilities include: clubhouse, swimming pool, badminton court, function hall, and guest rooms. Booking must be made at least 24 hours in advance. Clubhouse booking fee is Rs. 5000 for 4 hours, function hall is Rs. 8000 for 6 hours. Swimming pool and sports facilities are free but require advance booking to manage capacity. Cancellations must be made 48 hours before the booking to receive a full refund."
+  },
+  {
+    "id": "doc005",
+    "source": "Visitor Management System Guide",
+    "text": "The society uses a digital visitor management system. All visitors must register at the gate using their mobile number and valid ID proof. The system generates a unique OTP which is sent to the host resident for verification. Once approved, the visitor receives a time-limited gate pass. For frequent visitors like domestic help, housekeeping staff, or delivery personnel, residents can create a permanent visitor list in the app. Security personnel scan QR codes for quick entry."
+  },
+  {
+    "id": "doc006",
+    "source": "Complaint Management System",
+    "text": "Residents can raise complaints through the NoBrokerHood portal under 'Help & Support'. Common categories include: plumbing issues, electrical problems, civil work, cleanliness, security concerns, and general queries. Each complaint is assigned a unique ticket number and routed to the appropriate department. Expected resolution time: Emergency issues - 4 hours, Urgent - 24 hours, Normal - 72 hours. Residents receive SMS and email updates on complaint status. Feedback is requested after resolution."
+  },
+  {
+    "id": "doc007",
+    "source": "Vehicle Parking Guidelines",
+    "text": "Each flat is allocated one covered parking space and one open parking space. Additional parking can be requested based on availability at Rs. 1500 per month for covered and Rs. 800 for open parking. All vehicles must display society parking stickers issued by the management. Visitor parking is available on a first-come basis for up to 4 hours. Overnight guest parking requires prior approval from security. Two-wheeler parking is free and available in designated zones. No commercial vehicles are allowed inside the premises without special permission."
+  },
+  {
+    "id": "doc008",
+    "source": "Water & Electricity Billing",
+    "text": "Water charges are included in monthly maintenance for general use. Individual flat water consumption is metered and billed separately if it exceeds 15,000 liters per month. Electricity for common areas is divided equally among all flats as part of maintenance charges. Flat owners are responsible for their individual electricity meters and bills from the electricity board. The society maintains backup power through diesel generators for essential services. Generator usage charges are billed separately during power outages based on consumed units."
+  },
+  {
+    "id": "doc009",
+    "source": "Society Rules & Regulations",
+    "text": "Pets are allowed but must be registered with the management. Pet owners are responsible for maintaining cleanliness in common areas. No loud music or parties after 11 PM. Renovation work is permitted only between 9 AM to 6 PM on weekdays. Prior approval is required for external color painting or structural modifications. Garbage must be segregated into wet and dry waste before disposal. Smoking is prohibited in common areas. Airbnb or short-term rentals require managing committee approval. Violation of society rules may result in penalties as per bylaws."
+  },
+  {
+    "id": "doc010",
+    "source": "Emergency Contacts & Procedures",
+    "text": "In case of emergency, contact: Security - 080-12345678 (24/7), Management Office - 080-87654321 (9 AM to 6 PM), Plumber - 9876543210, Electrician - 9876543211, Medical Emergency - 108. Fire extinguishers are located on each floor near the lift lobby. Emergency exits are marked and should never be blocked. Assembly point in case of fire is the basketball court. First aid boxes are available at the security office and clubhouse. The society has a WhatsApp group for emergency alerts. All residents should register on the NoBrokerHood app for real-time notifications."
+  },
+  {
+    "id": "doc011",
+    "source": "Society Amenities Overview",
+    "text": "NoBrokerHood offers premium amenities including: 2500 sq ft clubhouse with gym equipment, 25-meter swimming pool (operational 6 AM to 9 PM), badminton court, children's play area, jogging track, yoga room, reading room, and multipurpose hall. Gym is equipped with treadmills, cross trainers, dumbbells, and weight machines. Swimming pool membership costs Rs. 500 per month per family. Professional trainers are available on request at additional charges. Society also provides EV charging stations (4 charging points) at Rs. 15 per unit. Regular maintenance schedules are posted on notice boards."
+  },
+  {
+    "id": "doc012",
+    "source": "Document Submission Requirements",
+    "text": "New residents must submit the following documents to the management office: Ownership deed or registered sale agreement, Occupancy certificate, ID proof (Aadhaar, PAN, Passport), Recent passport-size photographs (4 copies), Vehicle registration certificates (for parking allocation), Police verification form for tenants. Documents can be uploaded through the NoBrokerHood portal under 'My Profile > Documents'. Physical copies are required for verification. Tenant owners must submit a No Objection Certificate from the flat owner along with a valid rental agreement. Document verification is completed within 7 working days."
+  }
+]
