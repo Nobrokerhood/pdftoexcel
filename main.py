@@ -38,8 +38,14 @@ except KeyError:
 app = FastAPI(title="NoBrokerHood PDF→Excel & Split Tool")
 
 #------------------- import and include KB router (modular)-----------------
-from kb.kb_service import router as kb_router
-app.include_router(kb_router)
+KB_ROUTER_LOADED = False
+try:
+    from kb.kb_service import router as kb_router
+    app.include_router(kb_router)
+    KB_ROUTER_LOADED = True
+    logger.info("✅ Knowledge Bot router loaded successfully")
+except Exception as e:
+    logger.warning(f"⚠️ Knowledge Bot not available: {e}")
 
 # ------------------- API Usage Logger Middleware -------------------
 @app.middleware("http")
