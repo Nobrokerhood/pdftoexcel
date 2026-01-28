@@ -11,3 +11,8 @@ python-multipart
 gspread
 google-auth
 
+# Knowledge Base Dependencies (ADD THESE 4 LINES)
+sentence-transformers
+pinecone
+scikit-learn
+chromadb
