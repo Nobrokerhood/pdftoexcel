@@ -11,7 +11,7 @@ open and and access the html and to work <br>
 befor deploying the code to rendar update the basic_URL OCR.HTML file current code "const BASE_URL = "http://localhost:8000";<br>
 delete the function **# ------------------- CORS for Local Dev -------------------**
 
-
+```
 #**use this code to run this code on local Below**
 
 #------------------- CORS for Local Dev -------------------
@@ -36,7 +36,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+```
 ===========================================================================================================
 You will get the login audit and app usage report, new code update <br>
 # file name :- API_Usage_Report <br>
