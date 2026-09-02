@@ -62,4 +62,64 @@ You will get the login audit and app usage report, new code update <br>
 
 <img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/1e72a741-ccd6-4edd-9e25-4d1df3763263" />
 
+## Accounting AI Workflow
+
+New local backend:
+
+`uvicorn main:app --reload --port 8030`
+
+New frontend:
+
+`python -m http.server 5000`
+
+Open:
+
+`http://127.0.0.1:5000/index.html`
+
+The new `accounting.html` page supports the first workflow shell for:
+
+- `MEMBER_RECEIPT`
+- `VENDOR_INVOICE`
+
+The flow creates a processing job, uploads the original source to Drive,
+runs the LangGraph workflow to mandatory human review, allows edits/mapping
+resolution, and generates XLSX only after approval.
+
+## Live Google Configuration
+
+Use this `.env` file:
+
+`C:\Users\virub\Desktop\genai\AI_Agent\legacy_repos\pdftoexcel\.env`
+
+Required live variables:
+
+```env
+GOOGLE_CLIENT_ID=
+VITE_GOOGLE_CLIENT_ID=
+ALLOWED_EMAIL_DOMAIN=nobroker.in
+GOOGLE_SERVICE_ACCOUNT_FILE=
+GOOGLE_SERVICE_ACCOUNT_JSON=
+GOOGLE_ACCOUNTING_SPREADSHEET_ID=
+GOOGLE_DRIVE_ROOT_FOLDER_ID=
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Optional legacy per-sheet overrides take priority for their individual tables:
+
+```env
+GOOGLE_USER_MASTER_SHEET_ID=
+GOOGLE_LOGIN_AUDIT_SHEET_ID=
+GOOGLE_SESSION_LOG_SHEET_ID=
+GOOGLE_ACTIVITY_LOG_SHEET_ID=
+GOOGLE_PROCESSING_LOG_SHEET_ID=
+GOOGLE_TEMPLATE_MASTER_SHEET_ID=
+GOOGLE_FOLDER_CONFIG_SHEET_ID=
+GOOGLE_MAPPING_MASTER_SHEET_ID=
+GOOGLE_API_USAGE_SHEET_ID=
+```
+
+Shared spreadsheet tabs are documented in `docs/LIVE_GOOGLE_SETUP.md`.
+Run `python tools/bootstrap_google_resources.py --check` before live use.
+
 

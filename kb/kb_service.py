@@ -3,7 +3,8 @@ import os
 import json
 from . import embeddings
 import logging
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -13,14 +14,16 @@ router = APIRouter()
 try:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        rag_model = genai.GenerativeModel("gemini-2.0-flash-exp")
+        rag_model = genai.Client(api_key=GEMINI_API_KEY)
+        rag_model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         logger.info("✅ Gemini RAG model initialized")
     else:
         rag_model = None
+        rag_model_name = None
         logger.warning("⚠️ GEMINI_API_KEY not set, RAG disabled")
 except Exception as e:
     rag_model = None
+    rag_model_name = None
     logger.warning(f"⚠️ Could not initialize Gemini for RAG: {e}")
 
 
@@ -62,14 +65,15 @@ USER QUESTION: {query}
 ANSWER (based only on the documents above):"""
 
     try:
-        response = rag_model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.3,  # Low temperature for factual responses
-                "top_p": 0.8,
-                "top_k": 40,
-                "max_output_tokens": 500,
-            }
+        response = rag_model.models.generate_content(
+            model=rag_model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                top_p=0.8,
+                top_k=40,
+                max_output_tokens=500,
+            ),
         )
         
         answer = response.text.strip()

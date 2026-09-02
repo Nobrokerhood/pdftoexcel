@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Accounting AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #607089;
+      --line: #d9e1ec;
+      --primary: #0f766e;
+      --primary-dark: #115e59;
+      --danger: #b42318;
+      --warn: #9a6700;
+      --focus: #2563eb;
+      --field: #fbfcfe;
+      --ok-bg: #e8f5f2;
+      --warn-bg: #fff7df;
+      --bad-bg: #fff0ef;
+      --info-bg: #eef6ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.5;
+    }
+
+    .layout {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr);
+    }
+
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand { width: 160px; }
+
+    nav { display: grid; gap: 6px; }
+
+    nav a,
+    .logout,
+    button {
+      min-height: 44px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    nav a,
+    .logout {
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      color: var(--text);
+      text-decoration: none;
+      border: 0;
+      background: transparent;
+      text-align: left;
+    }
+
+    nav a.active {
+      background: var(--ok-bg);
+      color: var(--primary-dark);
+      font-weight: 700;
+    }
+
+    .logout {
+      margin-top: auto;
+      color: var(--danger);
+    }
+
+    main { padding: 24px; }
+
+    .topbar,
+    .actions,
+    .review-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar { margin-bottom: 18px; }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .user {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: right;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(300px, 430px) minmax(360px, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .review-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.1fr);
+      gap: 16px;
+      align-items: start;
+      margin-top: 16px;
+    }
+
+    section,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .field { margin-bottom: 14px; }
+
+    select,
+    input[type="text"],
+    input[type="file"],
+    textarea {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--field);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+    }
+
+    input[readonly] {
+      color: #334155;
+      background: #eef3f8;
+    }
+
+    button.primary {
+      border: 0;
+      padding: 0 16px;
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+    }
+
+    button.primary:hover { background: var(--primary-dark); }
+
+    button.secondary {
+      border: 1px solid var(--line);
+      padding: 0 14px;
+      background: var(--panel);
+      color: var(--text);
+    }
+
+    button.danger {
+      border: 1px solid #f0b4ae;
+      padding: 0 14px;
+      background: var(--bad-bg);
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .status {
+      min-height: 24px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--primary-dark); }
+
+    .progress {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .progress li,
+    .badge {
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .progress li.done,
+    .badge.ok {
+      border-color: #b7ddd5;
+      background: var(--ok-bg);
+      color: var(--primary-dark);
+    }
+
+    .badge.warn {
+      border-color: #f3d383;
+      background: var(--warn-bg);
+      color: var(--warn);
+    }
+
+    .badge.bad {
+      border-color: #f0b4ae;
+      background: var(--bad-bg);
+      color: var(--danger);
+    }
+
+    .summary {
+      display: grid;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .summary div {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+    }
+
+    .summary span:first-child { color: var(--muted); }
+    .summary span:last-child { font-weight: 700; text-align: right; }
+
+    .preview {
+      min-height: 420px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .preview iframe,
+    .preview img {
+      width: 100%;
+      height: 520px;
+      border: 0;
+      object-fit: contain;
+      background: #f1f5f9;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .verification,
+    .issues,
+    .mapping-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .hidden { display: none; }
+
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .health-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8fafc;
+      padding: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .health-item span:first-child {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; }
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .workspace,
+      .review-grid,
+      .fields {
+        grid-template-columns: 1fr;
+      }
+      .user { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <img class="brand" src="https://www.nobrokerhood.com/assets/images/logo.png" alt="NoBrokerHood">
+      <nav aria-label="Primary">
+        <a href="accounting.html?v=light-ui" class="active">Accounting AI</a>
+        <a href="#config-health" id="adminHealthLink" class="hidden" onclick="showConfigHealth(event)">Configuration Health</a>
+        <a href="ocr.html?v=light-ui">Legacy Converter</a>
+        <a href="voice.html?v=light-ui">Voice Tool</a>
+      </nav>
+      <button class="logout" type="button" onclick="logout()">Logout</button>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <h1>Accounting AI</h1>
+        <div class="user" id="user"></div>
+      </div>
+
+      <div class="workspace">
+        <section>
+          <h2>New Processing Job</h2>
+
+          <div class="field">
+            <label for="purpose">Purpose</label>
+            <select id="purpose"></select>
+          </div>
+
+          <div class="field">
+            <label for="template">Template</label>
+            <input id="template" type="text" readonly>
+          </div>
+
+          <div class="field">
+            <label for="destination">Destination</label>
+            <input id="destination" type="text" readonly>
+          </div>
+
+          <div class="field">
+            <label for="file">File</label>
+            <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="showPreview()">
+          </div>
+
+          <div class="actions">
+            <button class="secondary" type="button" onclick="validateSelection()">Validate Configuration</button>
+            <button class="primary" id="startBtn" type="button" onclick="startProcessing()">Start Processing</button>
+          </div>
+          <div id="status" class="status" role="status" aria-live="polite"></div>
+        </section>
+
+        <section>
+          <h2>Agent Progress</h2>
+          <ul class="progress" id="progress"></ul>
+          <div class="summary" style="margin-top: 16px;">
+            <div><span>Job ID</span><span id="summary-job">-</span></div>
+            <div><span>Purpose</span><span id="summary-purpose">-</span></div>
+            <div><span>Template Code</span><span id="summary-template">-</span></div>
+            <div><span>Overall Status</span><span id="summary-status">-</span></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="review-grid hidden" id="reviewGrid">
+        <section>
+          <h2>Original Source</h2>
+          <div class="preview" id="preview">Select a PDF or image.</div>
+        </section>
+
+        <section>
+          <div class="topbar">
+            <h2>Human Review</h2>
+            <span class="badge warn" id="humanStatus">Waiting</span>
+          </div>
+
+          <div class="field">
+            <label>Extracted Fields</label>
+            <div class="fields" id="fields"></div>
+          </div>
+
+          <div class="field">
+            <label>AI Verification</label>
+            <div class="verification" id="verification"></div>
+          </div>
+
+          <div class="field">
+            <label>Mappings</label>
+            <div class="mapping-list" id="mappings"></div>
+          </div>
+
+          <div class="field">
+            <label>Validation Issues</label>
+            <div class="issues" id="issues"></div>
+          </div>
+
+          <div class="review-actions">
+            <button class="secondary" type="button" onclick="saveCorrections()">Save Edits</button>
+            <button class="secondary" type="button" onclick="saveMappings()">Confirm Mappings</button>
+            <button class="danger" type="button" onclick="rejectJob()">Reject</button>
+            <button class="primary" type="button" onclick="approveJob()">Approve & Generate Excel</button>
+          </div>
+          <div class="status" id="reviewStatus" role="status" aria-live="polite"></div>
+          <div id="downloadWrap" class="hidden" style="margin-top: 12px;">
+            <button class="primary" type="button" onclick="downloadExcel()">Download Excel</button>
+          </div>
+        </section>
+      </div>
+
+      <section id="configHealth" class="hidden" style="margin-top: 16px;">
+        <div class="topbar">
+          <h2>Configuration Health</h2>
+          <button class="secondary" type="button" onclick="loadConfigHealth()">Refresh</button>
+        </div>
+        <div class="health-grid" id="healthGrid"></div>
+        <div class="status" id="healthStatus" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const BASE_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+      ? "http://127.0.0.1:8030"
+      : "https://pdftoexcel-846x.onrender.com";
+    const token = sessionStorage.getItem("accounting_session_token");
+    let currentJob = null;
+    let currentPreviewUrl = null;
+
+    if (!token) {
+      window.location.href = "index.html";
+    }
+
+    function authHeaders(json = true) {
+      const headers = { "Authorization": "Bearer " + token };
+      if (json) headers["Content-Type"] = "application/json";
+      return headers;
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(BASE_URL + path, {
+        ...options,
+        headers: { ...(options.headers || {}), "Authorization": "Bearer " + token }
+      });
+      if (res.status === 401) {
+        sessionStorage.clear();
+        window.location.href = "index.html";
+      }
+      return res;
+    }
+
+    function setStatus(message, ok = false) {
+      const status = document.getElementById("status");
+      status.textContent = message;
+      status.className = ok ? "status ok" : "status error";
+    }
+
+    async function boot() {
+      const userRes = await api("/auth/me");
+      if (!userRes.ok) return;
+      const user = await userRes.json();
+      document.getElementById("user").textContent = `${user.name || user.email} | ${user.role}`;
+      document.getElementById("adminHealthLink").classList.toggle("hidden", user.role !== "ADMIN");
+
+      const purposeRes = await api("/config/purposes");
+      const data = await purposeRes.json();
+      const select = document.getElementById("purpose");
+      select.innerHTML = data.purposes.map((purpose) =>
+        `<option value="${purpose.code}">${purpose.label}</option>`
+      ).join("");
+      select.addEventListener("change", validateSelection);
+      await validateSelection();
+      renderProgress([]);
+    }
+
+    function showConfigHealth(event) {
+      event.preventDefault();
+      document.getElementById("configHealth").classList.remove("hidden");
+      loadConfigHealth();
+    }
+
+    function statusClass(status) {
+      if (status === "READY" || status === "CONFIGURED" || status === "PASS") return "ok";
+      if (status === "MISSING" || status === "NO_ACCESS" || status === "MISMATCH") return "bad";
+      return "warn";
+    }
+
+    function labelize(key) {
+      return key.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+    }
+
+    async function loadConfigHealth() {
+      const grid = document.getElementById("healthGrid");
+      const status = document.getElementById("healthStatus");
+      status.textContent = "Checking configuration...";
+      status.className = "status ok";
+      try {
+        const res = await api("/config/health");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Health check failed.");
+        grid.innerHTML = Object.entries(data.status).map(([key, value]) =>
+          `<div class="health-item"><span>${labelize(key)}</span><span class="badge ${statusClass(value)}">${value}</span></div>`
+        ).join("");
+        status.textContent = "Configuration health loaded.";
+      } catch (error) {
+        status.textContent = error.message;
+        status.className = "status error";
+      }
+    }
+
+    async function validateSelection() {
+      const purpose = document.getElementById("purpose").value;
+      try {
+        const res = await api("/processing/validate-config", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ purpose, destination_status: "incoming" })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Configuration missing.");
+        document.getElementById("template").value = data.template.template_name;
+        document.getElementById("destination").value = `${data.purpose} Incoming`;
+        document.getElementById("summary-purpose").textContent = data.purpose;
+        document.getElementById("summary-template").textContent = data.template.template_code;
+        setStatus("Configuration verified.", true);
+      } catch (error) {
+        document.getElementById("template").value = "";
+        document.getElementById("destination").value = "";
+        setStatus(error.message);
+      }
+    }
+
+    function showPreview() {
+      const file = document.getElementById("file").files[0];
+      const preview = document.getElementById("preview");
+      if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+      if (!file) {
+        preview.textContent = "Select a PDF or image.";
+        return;
+      }
+      currentPreviewUrl = URL.createObjectURL(file);
+      if (file.type === "application/pdf") {
+        preview.innerHTML = `<iframe title="Source PDF" src="${currentPreviewUrl}"></iframe>`;
+      } else {
+        preview.innerHTML = `<img alt="Source preview" src="${currentPreviewUrl}">`;
+      }
+    }
+
+    async function startProcessing() {
+      const file = document.getElementById("file").files[0];
+      const purpose = document.getElementById("purpose").value;
+      if (!file) {
+        setStatus("Select a PDF or image first.");
+        return;
+      }
+      const startBtn = document.getElementById("startBtn");
+      startBtn.disabled = true;
+      setStatus("Creating job and running workflow...", true);
+
+      const form = new FormData();
+      form.append("purpose", purpose);
+      form.append("file", file);
+
+      try {
+        const res = await api("/processing/jobs", {
+          method: "POST",
+          headers: authHeaders(false),
+          body: form
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Processing failed.");
+        currentJob = data;
+        renderJob(data);
+        document.getElementById("reviewGrid").classList.remove("hidden");
+        setStatus("Waiting for human review.", true);
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        startBtn.disabled = false;
+      }
+    }
+
+    function renderProgress(items) {
+      const list = document.getElementById("progress");
+      const defaults = [
+        "File uploaded",
+        "Stored in Incoming",
+        "Extraction",
+        "AI Verification",
+        "Mapping",
+        "Validation",
+        "Human review",
+        "Excel generation"
+      ].map(label => ({ label, status: "PENDING" }));
+      list.innerHTML = (items.length ? items : defaults).map(item =>
+        `<li class="${item.status === "DONE" ? "done" : ""}">${item.label}</li>`
+      ).join("");
+    }
+
+    function renderJob(job) {
+      currentJob = job;
+      document.getElementById("summary-job").textContent = job.job_id || "-";
+      document.getElementById("summary-purpose").textContent = job.purpose || "-";
+      document.getElementById("summary-template").textContent = job.template_code || "-";
+      document.getElementById("summary-status").textContent = job.overall_status || "-";
+      document.getElementById("humanStatus").textContent = job.human_status || "-";
+      document.getElementById("humanStatus").className = job.overall_status === "COMPLETED" ? "badge ok" : "badge warn";
+      renderProgress(job.progress || []);
+      renderFields(job.mapping_result?.mapped_data || job.extracted_data || {});
+      renderVerification(job.verification_result || {});
+      renderMappings(job.mapping_result || {});
+      renderIssues(job.validation_result || {});
+      document.getElementById("downloadWrap").classList.toggle("hidden", job.overall_status !== "COMPLETED");
+    }
+
+    function renderFields(data) {
+      const fields = document.getElementById("fields");
+      fields.innerHTML = Object.entries(data).map(([key, value]) => {
+        const display = typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : (value ?? "");
+        const input = typeof value === "object" && value !== null
+          ? `<textarea data-field="${key}">${display}</textarea>`
+          : `<input type="text" data-field="${key}" value="${String(display).replace(/"/g, "&quot;")}">`;
+        return `<div><label>${key}</label>${input}</div>`;
+      }).join("");
+    }
+
+    function renderVerification(result) {
+      const wrap = document.getElementById("verification");
+      const rows = result.fields || [];
+      if (!rows.length) {
+        wrap.innerHTML = `<span class="badge ok">${result.overall_status || "PENDING"}</span>`;
+        return;
+      }
+      wrap.innerHTML = rows.map(row =>
+        `<div class="badge ${row.status === "VERIFIED" ? "ok" : "bad"}">${row.field}: ${row.status} | extracted ${row.extracted_value ?? ""} | verified ${row.verified_value ?? ""}</div>`
+      ).join("");
+    }
+
+    function renderMappings(result) {
+      const wrap = document.getElementById("mappings");
+      const missing = result.missing || [];
+      if (!missing.length) {
+        wrap.innerHTML = `<span class="badge ok">${result.status || "PENDING"}</span>`;
+        return;
+      }
+      wrap.innerHTML = missing.map((item, index) =>
+        `<div>
+          <label>${item.type}: ${item.source_value}</label>
+          <input type="text" data-map-index="${index}" data-map-type="${item.type}" data-map-source="${item.source_value}" placeholder="Enter approved code">
+        </div>`
+      ).join("");
+    }
+
+    function renderIssues(result) {
+      const wrap = document.getElementById("issues");
+      const issues = result.issues || [];
+      if (!issues.length) {
+        wrap.innerHTML = `<span class="badge ok">${result.status || "PENDING"}</span>`;
+        return;
+      }
+      wrap.innerHTML = issues.map(issue =>
+        `<div class="badge bad">${issue.field}: ${issue.message}</div>`
+      ).join("");
+    }
+
+    async function refreshJob() {
+      if (!currentJob) return;
+      const res = await api(`/processing/jobs/${currentJob.job_id}`);
+      const data = await res.json();
+      if (res.ok) renderJob(data);
+    }
+
+    async function saveCorrections() {
+      if (!currentJob) return;
+      const corrections = {};
+      document.querySelectorAll("[data-field]").forEach(input => {
+        const key = input.getAttribute("data-field");
+        const original = (currentJob.mapping_result?.mapped_data || currentJob.extracted_data || {})[key];
+        let value = input.value;
+        if (typeof original === "object" && original !== null) {
+          try { value = JSON.parse(value); } catch (error) {}
+        }
+        if (JSON.stringify(original ?? "") !== JSON.stringify(value ?? "")) {
+          corrections[key] = value;
+        }
+      });
+      const res = await api(`/processing/jobs/${currentJob.job_id}/corrections`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ corrections })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        renderJob(data);
+        document.getElementById("reviewStatus").textContent = "Edits saved and validation rerun.";
+      }
+    }
+
+    async function saveMappings() {
+      if (!currentJob) return;
+      const resolutions = [];
+      document.querySelectorAll("[data-map-type]").forEach(input => {
+        if (input.value.trim()) {
+          resolutions.push({
+            type: input.getAttribute("data-map-type"),
+            source_value: input.getAttribute("data-map-source"),
+            target_value: input.value.trim()
+          });
+        }
+      });
+      const res = await api(`/processing/jobs/${currentJob.job_id}/mapping`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ resolutions })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        renderJob(data);
+        document.getElementById("reviewStatus").textContent = "Mappings confirmed and validation rerun.";
+      }
+    }
+
+    async function approveJob() {
+      if (!currentJob) return;
+      const res = await api(`/processing/jobs/${currentJob.job_id}/approve`, {
+        method: "POST",
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      if (res.ok) {
+        renderJob(data);
+        document.getElementById("reviewStatus").textContent = "Processing complete. Excel is ready.";
+      } else {
+        document.getElementById("reviewStatus").textContent = data.detail || "Approval blocked.";
+      }
+    }
+
+    async function rejectJob() {
+      if (!currentJob) return;
+      const res = await api(`/processing/jobs/${currentJob.job_id}/reject`, {
+        method: "POST",
+        headers: authHeaders()
+      });
+      const data = await res.json();
+      if (res.ok) {
+        renderJob(data);
+        document.getElementById("reviewStatus").textContent = "Job rejected. No output generated.";
+      }
+    }
+
+    async function downloadExcel() {
+      if (!currentJob) return;
+      const res = await api(`/processing/jobs/${currentJob.job_id}/download`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = currentJob.output_filename || "accounting_output.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function logout() {
+      await fetch(BASE_URL + "/auth/logout", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token }
+      }).catch(() => {});
+      sessionStorage.clear();
+      window.location.href = "index.html";
+    }
+
+    boot().catch(() => {
+      sessionStorage.clear();
+      window.location.href = "index.html";
+    });
+  </script>
+  <script src="session_timeout.js"></script>
+</body>
+</html>

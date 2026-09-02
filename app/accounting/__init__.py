@@ -1,0 +1,1 @@
+"""Accounting AI configuration foundation."""

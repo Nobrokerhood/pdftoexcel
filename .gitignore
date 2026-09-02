@@ -1,11 +1,45 @@
-# Secrets
-service_account.json
+# Secrets and local environment
 .env
+.env.*
+!.env.example
+service_account.json
+service-account.json
+credentials.json
+client_secret*.json
+*secret*.json
+*credentials*.json
 
-# Virtual environment
+# Virtual environments
 .venv/
 venv/
+env/
+ENV/
 
-# Python cache
+# Python cache and test output
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data, generated outputs, and temporary files
+kb_chroma/
+kb_store.json
+*.xlsx
+*.xls
+*.csv
+*.zip
+*.pdf
+*.webm
+*.log
+tmp/
+temp/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -2,142 +2,176 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>NoBrokerHood Tools | Login</title>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Accounting AI | Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://accounts.google.com/gsi/client?hl=en" async defer></script>
-
   <style>
+    :root {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #5f6f89;
+      --line: #d9e1ec;
+      --primary: #0f766e;
+      --primary-dark: #115e59;
+      --danger: #b42318;
+      --focus: #2563eb;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
-      font-family: "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(135deg, #000000, #001a33);
-      color: #f0f2f5;
-      height: 100vh;
+      min-height: 100vh;
       margin: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.5;
     }
 
-    .login-box {
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(10px);
-      padding: 50px;
-      border-radius: 15px;
-      border: 1px solid #00bfff;
-      text-align: center;
-      box-shadow: 0 0 30px rgba(0, 191, 255, 0.2);
-      max-width: 400px;
-      width: 90%;
+    main {
+      width: min(92vw, 420px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 32px;
+      box-shadow: 0 18px 50px rgba(23, 32, 51, 0.08);
     }
 
-    h2 {
-      margin-bottom: 10px;
-      color: #00bfff;
+    .brand {
+      width: 174px;
+      display: block;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0;
     }
 
     p {
-      color: #88aabb;
-      margin-bottom: 30px;
-    }
-
-    #error-msg {
-      color: #ff4444;
-      margin-top: 20px;
-      display: none;
+      margin: 0 0 24px;
+      color: var(--muted);
     }
 
     .signin-container {
+      min-height: 44px;
       display: flex;
-      justify-content: center;
-      margin-top: 10px;
-      min-height: 40px;
+      align-items: center;
+    }
+
+    .status {
+      min-height: 24px;
+      margin-top: 18px;
+      color: var(--danger);
+      font-size: 14px;
+    }
+
+    .status.ok { color: var(--primary-dark); }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
     }
   </style>
 </head>
-
 <body>
-
-  <div class="login-box">
-    <img src="https://www.nobrokerhood.com/assets/images/logo-white.png"
-         alt="logo"
-         width="180"
-         style="margin-bottom: 20px;">
-
-    <h2>Internal Tools Portal</h2>
-    <p>Please sign in with your <b>@nobroker.in</b> account.</p>
+  <main>
+    <img class="brand" src="https://www.nobrokerhood.com/assets/images/logo.png" alt="NoBrokerHood">
+    <h1>Accounting AI</h1>
+    <p>Continue with Google</p>
 
     <div class="signin-container">
-      <div id="g_id_onload"
-           data-client_id="414963441128-69gsdlfdfn8hrf7ovgc9mfh10spnc5nq.apps.googleusercontent.com"
-           data-callback="handleCredentialResponse"
-           data-auto_select="false"
-           data-use_fedcm_for_prompt="false">
-      </div>
-
-      <div class="g_id_signin"
-           data-type="standard"
-           data-size="large"
-           data-theme="filled_blue"
-           data-text="sign_in_with"
-           data-shape="rectangular"
-           data-width="250">
-      </div>
+      <div id="googleSignIn"></div>
     </div>
 
-    <p id="error-msg"></p>
-  </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </main>
 
   <script>
-    function handleCredentialResponse(response) {
+    const BASE_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+      ? "http://127.0.0.1:8030"
+      : "https://pdftoexcel-846x.onrender.com";
+    const FALLBACK_GOOGLE_CLIENT_ID = "414963441128-69gsdlfdfn8hrf7ovgc9mfh10spnc5nq.apps.googleusercontent.com";
+
+    async function loadPublicConfig() {
       try {
-        const payload = decodeJwtResponse(response.credential);
-        const email = payload.email;
-
-        if (!email.endsWith("@nobroker.in")) {
-          const err = document.getElementById("error-msg");
-          err.textContent = "Access Denied. " + email + " is not authorized.";
-          err.style.display = "block";
-          return;
-        }
-
-        // 🔐 Send login audit to backend
-        fetch("https://pdftoexcel-846x.onrender.com/login-log", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            email: email,
-            name: payload.name || "",
-            login_time: new Date().toISOString()
-          })
-        })
-        .catch(err => {
-          console.error("Login logging failed:", err);
-          // Do NOT block login if logging fails
-        })
-        .finally(() => {
-          sessionStorage.setItem("nobroker_user", email);
-          window.location.href = "ocr.html";
-        });
-
-      } catch (e) {
-        console.error("Login Error:", e);
+        const res = await fetch(BASE_URL + "/config/public");
+        if (!res.ok) throw new Error("Config unavailable");
+        return await res.json();
+      } catch (error) {
+        return { google_client_id: FALLBACK_GOOGLE_CLIENT_ID };
       }
     }
 
-    function decodeJwtResponse(token) {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
+    function renderGoogleButton(clientId) {
+      if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+        setTimeout(() => renderGoogleButton(clientId), 100);
+        return;
+      }
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleCredentialResponse,
+        auto_select: false,
+        use_fedcm_for_prompt: false
+      });
+      window.google.accounts.id.renderButton(
+        document.getElementById("googleSignIn"),
+        {
+          type: "standard",
+          size: "large",
+          theme: "outline",
+          text: "continue_with",
+          shape: "rectangular",
+          width: 260
+        }
       );
-      return JSON.parse(jsonPayload);
     }
-  </script>
 
+    async function handleCredentialResponse(response) {
+      const status = document.getElementById("status");
+      status.textContent = "Signing in...";
+      status.className = "status ok";
+
+      try {
+        const res = await fetch(BASE_URL + "/auth/google-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: response.credential })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          status.textContent = data.detail || "Access denied.";
+          status.className = "status";
+          return;
+        }
+
+        sessionStorage.setItem("accounting_session_token", data.session_token);
+        sessionStorage.setItem("accounting_session_id", data.session_id);
+        sessionStorage.setItem("nobroker_user", data.email);
+        sessionStorage.setItem("accounting_user", JSON.stringify({
+          email: data.email,
+          name: data.name,
+          role: data.role
+        }));
+        window.location.href = "accounting.html?v=light-ui";
+      } catch (error) {
+        status.textContent = "Login service is unavailable.";
+        status.className = "status";
+      }
+    }
+
+    loadPublicConfig().then((config) => {
+      renderGoogleButton(config.google_client_id || FALLBACK_GOOGLE_CLIENT_ID);
+    });
+  </script>
 </body>
 </html>

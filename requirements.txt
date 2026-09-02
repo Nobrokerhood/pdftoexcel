@@ -2,7 +2,8 @@ fastapi
 uvicorn
 pandas
 pillow
-google-generativeai
+google-genai
+google-api-python-client
 pdf2image
 python-dotenv
 openpyxl
@@ -10,6 +11,7 @@ PyPDF2
 python-multipart
 gspread
 google-auth
+langgraph
 
 # Knowledge Base Dependencies (ADD THESE 4 LINES)
 sentence-transformers
