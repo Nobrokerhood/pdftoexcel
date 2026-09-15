@@ -1,4 +1,7 @@
+import logging
+
 from langgraph.graph import END, START, StateGraph
+from pydantic import ValidationError
 
 from app.accounting.mapping import MappingMasterService
 from app.accounting.output import TemplateOutputGenerator
@@ -9,6 +12,7 @@ from app.agents.repair import RepairAgent
 from app.agents.verifier import VerificationAgent
 from app.audit.activity import AuditLogService
 from app.core.config import Settings
+from app.core.errors import ExternalServiceUnavailableError
 from app.google.drive_service import GoogleDriveError
 from app.processing.jobs import ProcessingJob
 from app.processing.log_lifecycle import ProcessingLifecycleService
@@ -18,6 +22,17 @@ from app.workflows.routing import (
     route_after_verification,
 )
 from app.workflows.state import AccountingWorkflowState
+
+
+logger = logging.getLogger(__name__)
+
+MALFORMED_VERIFICATION_MESSAGE = (
+    "AI verification returned a result in an unexpected format, so the extracted "
+    "data could not be verified. Please re-process the document."
+)
+MALFORMED_REPAIR_MESSAGE = (
+    "AI repair returned data in an unexpected format. Please re-process the document."
+)
 
 
 class AccountingWorkflow:
@@ -128,6 +143,16 @@ class AccountingWorkflow:
         job.current_step = state.get("current_step", job.current_step)
         job.last_error = state.get("last_error", job.last_error)
 
+    def _fail_step(self, job: ProcessingJob, step: str, status_field: str, action: str, exc: Exception):
+        # An unavailable AI service ends the run in FAILED; the graph routes it to human review.
+        message = str(exc)
+        setattr(job, status_field, "FAILED")
+        job.overall_status = "FAILED"
+        job.last_error = message
+        self.lifecycle_service.update(job, **{status_field: "FAILED"}, current_step=step, overall_status="FAILED", last_error=message)
+        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, action, job.purpose, job.source_drive_file_id, "", "FAIL", message)
+        return {status_field: "FAILED", "current_step": step, "overall_status": "FAILED", "last_error": message}
+
     def _prepare(self, state: AccountingWorkflowState):
         job = self._job(state)
         job.current_step = "PREPARE"
@@ -162,10 +187,17 @@ class AccountingWorkflow:
     def _verify(self, state: AccountingWorkflowState):
         job = self._job(state)
         if job.overall_status == "FAILED":
-            return {"verification_status": "FAILED"}
+            # Extraction failed, so verification never ran; keep its status as-is.
+            return {"verification_status": job.verification_status}
         template = self._template(job)
         self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "AI_VERIFICATION_STARTED", job.purpose, job.source_drive_file_id, "", "OK", "")
-        result = self.verification_agent.verify(job.source_bytes, job.purpose, template, job.extracted_data)
+        try:
+            result = self.verification_agent.verify(job.source_bytes, job.purpose, template, job.extracted_data)
+        except ExternalServiceUnavailableError as exc:
+            return self._fail_step(job, "VERIFYING", "verification_status", "AI_VERIFICATION_FAILED", exc)
+        except ValidationError as exc:
+            logger.warning("Malformed verification result for job %s: %s", job.job_id, exc)
+            return self._fail_step(job, "VERIFYING", "verification_status", "AI_VERIFICATION_FAILED", ValueError(MALFORMED_VERIFICATION_MESSAGE))
         job.verification_result = result.model_dump(mode="json")
         job.verification_status = result.overall_status
         self.lifecycle_service.update(job, verification_status=result.overall_status, current_step="VERIFYING")
@@ -181,13 +213,19 @@ class AccountingWorkflow:
     def _repair(self, state: AccountingWorkflowState):
         job = self._job(state)
         template = self._template(job)
-        repaired = self.repair_agent.repair(
-            job.source_bytes,
-            job.purpose,
-            template,
-            job.extracted_data,
-            VerificationResult(**job.verification_result),
-        )
+        try:
+            repaired = self.repair_agent.repair(
+                job.source_bytes,
+                job.purpose,
+                template,
+                job.extracted_data,
+                VerificationResult(**job.verification_result),
+            )
+        except ExternalServiceUnavailableError as exc:
+            return self._fail_step(job, "REPAIR_EXTRACTION", "extraction_status", "AI_REPAIR_FAILED", exc)
+        except ValidationError as exc:
+            logger.warning("Malformed repair result for job %s: %s", job.job_id, exc)
+            return self._fail_step(job, "REPAIR_EXTRACTION", "extraction_status", "AI_REPAIR_FAILED", ValueError(MALFORMED_REPAIR_MESSAGE))
         job.extraction_attempt += 1
         job.extracted_data = repaired
         self.lifecycle_service.update(job, extraction_status="REPAIRED", current_step="REPAIR_EXTRACTION")
@@ -240,14 +278,20 @@ class AccountingWorkflow:
         }
 
     def approve_and_complete(self, job: ProcessingJob) -> ProcessingJob:
-        data = job.mapping_result.get("mapped_data") or job.extracted_data
+        # Only a job waiting in human review, with passed verification and
+        # confirmed mappings, may produce output. FAILED, REJECTED and COMPLETED
+        # jobs and jobs that never reached mapping are refused.
+        if job.overall_status != "NEEDS_REVIEW":
+            raise ValueError("JOB_NOT_AWAITING_REVIEW")
+        if job.verification_status != "PASSED":
+            raise ValueError("VERIFICATION_NOT_PASSED")
+        # Mapping is optional/recommended, but no longer a hard blocker for Excel generation
+        data = (job.mapping_result.get("mapped_data") if isinstance(job.mapping_result, dict) else None) or job.extracted_data
         validation = self.validation_service.validate(job.purpose, data)
         job.validation_result = validation.model_dump(mode="json")
         job.validation_status = validation.status
         if validation.status != "PASSED":
             raise ValueError("VALIDATION_BLOCKED")
-        if job.mapping_status == "NEEDS_MAPPING":
-            raise ValueError("MAPPING_REQUIRED")
 
         template = self._template(job)
         job.human_status = "APPROVED"

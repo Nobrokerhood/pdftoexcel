@@ -6,6 +6,7 @@ from typing import Any
 
 import gspread
 from gspread.exceptions import WorksheetNotFound
+from gspread.utils import ValueInputOption, rowcol_to_a1
 from google.oauth2.service_account import Credentials
 
 from app.core.config import Settings
@@ -18,6 +19,14 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
+
+MAX_CELL_CHARS = 45000
+
+
+def safe_cell_value(val: Any) -> Any:
+    if isinstance(val, str) and len(val) > MAX_CELL_CHARS:
+        return val[:MAX_CELL_CHARS] + "...[TRUNCATED]"
+    return val
 
 
 class GoogleSheetsError(RuntimeError):
@@ -156,7 +165,8 @@ class GoogleSheetsService:
         worksheet_name: str = "Sheet1",
     ) -> bool:
         worksheet = self._worksheet(spreadsheet_id, worksheet_name)
-        worksheet.append_row(values)
+        safe_values = [safe_cell_value(v) for v in values]
+        worksheet.append_row(safe_values)
         self._cache.pop((spreadsheet_id or "", worksheet_name), None)
         return True
 
@@ -208,11 +218,20 @@ class GoogleSheetsService:
 
         for row_number, row in enumerate(rows[1:], start=2):
             if key_index < len(row) and row[key_index].strip().lower() == key_value.lower():
-                for column_name, value in updates.items():
-                    if column_name in headers:
-                        worksheet.update_cell(
-                            row_number, headers.index(column_name) + 1, value
-                        )
+                # One batch request per row update: per-cell writes exceed the
+                # Sheets "write requests per minute" quota within a single job.
+                cells = [
+                    {
+                        "range": rowcol_to_a1(row_number, headers.index(column_name) + 1),
+                        "values": [[safe_cell_value(value)]],
+                    }
+                    for column_name, value in updates.items()
+                    if column_name in headers
+                ]
+                if cells:
+                    worksheet.batch_update(
+                        cells, value_input_option=ValueInputOption.user_entered
+                    )
                 self._cache.pop((spreadsheet_id or "", worksheet_name), None)
                 return True
         return False

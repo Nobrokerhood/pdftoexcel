@@ -1,10 +1,13 @@
 import io
+from dataclasses import replace
 from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
 from PIL import Image
 from PyPDF2 import PdfReader, PdfWriter
 
+from app.app_factory import create_app
+from app.core.config import get_settings
 from main import app
 
 
@@ -75,7 +78,9 @@ def test_split_pdf_rejects_invalid_page_group_size():
 
 
 def test_gemini_endpoints_report_missing_configuration():
-    response = client.post(
+    # Build the app without a key: main.app reads the developer's .env and would call real Gemini.
+    unconfigured = TestClient(create_app(settings=replace(get_settings(), gemini_api_key=None)))
+    response = unconfigured.post(
         "/process-document/",
         files={"file": ("sample.png", _sample_png(), "image/png")},
     )

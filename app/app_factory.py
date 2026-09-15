@@ -1,8 +1,10 @@
 import logging
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import uuid
 
 from app.accounting.folders import FolderConfigService, FolderRouterService
 from app.accounting.mapping import MappingMasterService
@@ -21,7 +23,7 @@ from app.audit.activity import AuditLogService, ProcessingLogService
 from app.auth.google_auth import GoogleTokenVerifier
 from app.auth.sessions import SessionService
 from app.auth.user_master import UserMasterService
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_production_config
 from app.google.drive_service import GoogleDriveService
 from app.google.sheets import GoogleSheetsAuditClient
 from app.google.sheets_service import GoogleSheetsService
@@ -49,8 +51,21 @@ def create_app(
     job_store=None,
 ) -> FastAPI:
     settings = settings or get_settings()
+    prod_errors = validate_production_config(settings)
+    if prod_errors:
+        raise RuntimeError(f"Production configuration validation failed: {'; '.join(prod_errors)}")
+
     sheets_service = sheets_service or GoogleSheetsService(settings)
-    app = FastAPI(title="NoBrokerHood PDF to Excel & Split Tool")
+    docs_url = "/docs" if settings.enable_docs else None
+    redoc_url = "/redoc" if settings.enable_docs else None
+    openapi_url = "/openapi.json" if settings.enable_docs else None
+
+    app = FastAPI(
+        title="NoBrokerHood Accounting AI",
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url=openapi_url,
+    )
     app.state.settings = settings
     app.state.sheets_service = sheets_service
     app.state.drive_service = drive_service or GoogleDriveService(settings)
@@ -82,11 +97,13 @@ def create_app(
     app.state.validation_service = AccountingValidationService()
     app.state.output_generator = TemplateOutputGenerator()
     app.state.job_repository = app.state.job_store
+    from app.documents.ocr import DocumentOcrService, RapidOcrProvider
+    app.state.ocr_service = DocumentOcrService(settings.poppler_path, RapidOcrProvider(), dpi=150)
     app.state.extraction_agent = ExtractionAgent(
-        extraction_provider or GeminiExtractionProvider(app.state.gemini_client)
+        extraction_provider or GeminiExtractionProvider(app.state.gemini_client, ocr_service=app.state.ocr_service)
     )
     app.state.verification_agent = VerificationAgent(
-        verification_provider or GeminiVerificationProvider(app.state.gemini_client)
+        verification_provider or GeminiVerificationProvider(app.state.gemini_client, ocr_service=app.state.ocr_service)
     )
     app.state.repair_agent = RepairAgent(
         repair_provider or GeminiRepairProvider(app.state.gemini_client)
@@ -157,6 +174,46 @@ def create_app(
         logger.info("Knowledge Bot router loaded successfully")
     except Exception as exc:
         logger.warning("Knowledge Bot not available: %s", exc)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        if isinstance(exc, HTTPException):
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        incident_id = str(uuid.uuid4())[:8]
+        logger.error(
+            "Unhandled exception [incident=%s] on %s %s: %s",
+            incident_id,
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"An internal error occurred (Incident ID: {incident_id}). Please contact support."},
+        )
+
+    @app.get("/health", tags=["monitoring"])
+    def health():
+        return {"status": "healthy", "service": "nbh-accounting-ai"}
+
+    @app.get("/readiness", tags=["monitoring"])
+    def readiness():
+        from app.documents.pdf_images import poppler_available
+
+        has_creds = bool(settings.google_service_account_json or settings.google_service_account_file)
+        has_gemini = bool(settings.gemini_api_key)
+        has_poppler = poppler_available(settings.poppler_path)
+        is_ready = has_gemini and has_creds and has_poppler
+        return {
+            "status": "ready" if is_ready else "not_ready",
+            "checks": {
+                "gemini_configured": has_gemini,
+                "google_credentials_configured": has_creds,
+                "poppler_available": has_poppler,
+                "rapidocr_ready": True,
+            },
+        }
 
     @app.get("/")
     def root():

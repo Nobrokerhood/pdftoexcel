@@ -69,7 +69,7 @@ class GoogleDriveService:
         metadata = (
             self._drive()
             .files()
-            .get(fileId=folder_id, fields="id,mimeType,trashed")
+            .get(fileId=folder_id, fields="id,mimeType,trashed", supportsAllDrives=True)
             .execute()
         )
         if metadata.get("trashed"):
@@ -92,7 +92,7 @@ class GoogleDriveService:
         result = (
             self._drive()
             .files()
-            .create(body=body, media_body=media, fields="id")
+            .create(body=body, media_body=media, fields="id", supportsAllDrives=True)
             .execute()
         )
         return result["id"]
@@ -100,7 +100,7 @@ class GoogleDriveService:
     def move_file(self, file_id: str, folder_id: str) -> bool:
         self.validate_folder_id(folder_id)
         file_metadata = (
-            self._drive().files().get(fileId=file_id, fields="parents").execute()
+            self._drive().files().get(fileId=file_id, fields="parents", supportsAllDrives=True).execute()
         )
         previous_parents = ",".join(file_metadata.get("parents", []))
         self._drive().files().update(
@@ -108,6 +108,7 @@ class GoogleDriveService:
             addParents=folder_id,
             removeParents=previous_parents,
             fields="id,parents",
+            supportsAllDrives=True,
         ).execute()
         return True
 
@@ -115,14 +116,14 @@ class GoogleDriveService:
         return (
             self._drive()
             .files()
-            .get(fileId=file_id, fields="id,name,mimeType,parents,trashed")
+            .get(fileId=file_id, fields="id,name,mimeType,parents,trashed", supportsAllDrives=True)
             .execute()
         )
 
     def download_file(self, file_id: str) -> bytes:
         from googleapiclient.http import MediaIoBaseDownload
 
-        request = self._drive().files().get_media(fileId=file_id)
+        request = self._drive().files().get_media(fileId=file_id, supportsAllDrives=True)
         stream = io.BytesIO()
         downloader = MediaIoBaseDownload(stream, request)
         done = False
@@ -138,5 +139,23 @@ class GoogleDriveService:
         if parent_id:
             self.validate_folder_id(parent_id)
             body["parents"] = [parent_id]
-        result = self._drive().files().create(body=body, fields="id").execute()
+        result = self._drive().files().create(body=body, fields="id", supportsAllDrives=True).execute()
         return result["id"]
+
+    def list_files(self, folder_id: str, page_size: int = 100) -> list[dict]:
+        self.validate_folder_id(folder_id)
+        query = f"'{folder_id}' in parents and trashed = false"
+        result = (
+            self._drive()
+            .files()
+            .list(
+                q=query,
+                pageSize=page_size,
+                fields="files(id, name, mimeType, createdTime, size)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                corpora="allDrives",
+            )
+            .execute()
+        )
+        return result.get("files", [])

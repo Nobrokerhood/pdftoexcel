@@ -1,8 +1,8 @@
 const INACTIVITY_LIMIT = 20 * 60 * 1000;
 const HEARTBEAT_INTERVAL = 60 * 1000;
-const API_BASE_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-  ? "http://127.0.0.1:8030"
-  : "https://pdftoexcel-846x.onrender.com";
+const API_BASE_URL = (typeof window !== "undefined" && window.__API_BASE__ !== undefined)
+  ? window.__API_BASE__
+  : ((location.hostname === "localhost" || location.hostname === "127.0.0.1") ? "" : "");
 
 let logoutTimer;
 let userActive = true;

@@ -1,7 +1,11 @@
 from fastapi import HTTPException
 
 
-class ServiceNotConfiguredError(RuntimeError):
+class ExternalServiceUnavailableError(RuntimeError):
+    """Raised when an external service cannot serve requests and retrying will not help."""
+
+
+class ServiceNotConfiguredError(ExternalServiceUnavailableError):
     """Raised when an optional external service is required but not configured."""
 
 

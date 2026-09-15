@@ -47,6 +47,23 @@ class FolderConfigService:
         if purpose not in supported_purpose_codes():
             raise FolderConfigurationError("FOLDER_CONFIGURATION_MISSING")
 
+        import os
+
+        # Check environment variable overrides if configured
+        inc = os.getenv(f"{purpose}_INCOMING_FOLDER_ID")
+        rev = os.getenv(f"{purpose}_REVIEW_FOLDER_ID")
+        comp = os.getenv(f"{purpose}_COMPLETED_FOLDER_ID")
+        out = os.getenv(f"{purpose}_OUTPUT_FOLDER_ID")
+        if inc and rev and comp and out:
+            return FolderConfig(
+                purpose=purpose,
+                incoming_folder_id=inc.strip(),
+                review_folder_id=rev.strip(),
+                completed_folder_id=comp.strip(),
+                output_folder_id=out.strip(),
+                active=True,
+            )
+
         try:
             records = self.sheets_service.read_table("folder_config")
         except GoogleSheetsNotConfiguredError as exc:

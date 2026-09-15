@@ -345,11 +345,14 @@ class FakeDriveFiles:
     def __init__(self, folder_metadata):
         self.folder_metadata = folder_metadata
         self.created_body = None
+        self.calls = []
 
-    def get(self, fileId, fields):
+    def get(self, fileId, fields, supportsAllDrives=False):
+        self.calls.append(("get", supportsAllDrives))
         return ExecResult(self.folder_metadata)
 
-    def create(self, body, media_body, fields):
+    def create(self, body, media_body, fields, supportsAllDrives=False):
+        self.calls.append(("create", supportsAllDrives))
         self.created_body = body
         return ExecResult({"id": "uploaded-file-id"})
 
@@ -378,6 +381,8 @@ def test_drive_upload_calls_correct_folder_and_sanitizes_name():
     assert file_id == "uploaded-file-id"
     assert files.created_body["parents"] == ["folder-1"]
     assert files.created_body["name"] == "bad_name_.pdf"
+    # Shared drive folders are only visible to the API with supportsAllDrives.
+    assert files.calls == [("get", True), ("create", True)]
 
 
 def test_drive_invalid_folder_rejected():

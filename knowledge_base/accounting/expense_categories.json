@@ -1,0 +1,21 @@
+{
+  "description": "Keyword-based SUGGESTIONS of an expense category for register rows and invoice lines. A suggestion is shown to the reviewer; it is never used as a ledger code. Ledger/expense codes come only from Mapping_Master (EXPENSE_CATEGORY mappings).",
+  "categories": {
+    "Staff Salary": ["salary", "salaly", "wages", "h/k", "housekeeping staff"],
+    "Staff Salary Advance": ["salary advance", "advance (july", "adyamce", "advance salary"],
+    "Garden Maintenance": ["grass cutting", "garden", "gardener", "plants", "manure"],
+    "Electrical Repairs": ["electrical", "wire", "electrician", "bulb", "tube light"],
+    "Plumbing": ["plumbing", "plumber", "pipe", "tap"],
+    "Water Supply": ["drinking water", "water supply", "water tanker", "cans"],
+    "Office Refreshments": ["tea", "biscuit", "snacks", "coffee"],
+    "Office Stationery & Printing": ["xerox", "stationery", "stamp paper", "printing", "registration"],
+    "Cleaning & Consumables": ["washing", "cleaning", "phenyl", "broom", "table cloth"],
+    "Fuel": ["petrol", "diesel", "fuel"],
+    "Rent / Hire Charges": ["rent", "hire"],
+    "Civil & Construction Work": ["cement", "mason", "construction", "shed"],
+    "Pest Control": ["mosquito", "fogging", "pest"],
+    "Transport": ["transport", "auto", "courier"],
+    "Bank Transfer": ["a/c transfer", "account transfer", "bank transfer"],
+    "Miscellaneous": ["miscellaneous", "misc"]
+  }
+}

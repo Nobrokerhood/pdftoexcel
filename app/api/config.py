@@ -4,6 +4,7 @@ from app.accounting.folders import FolderConfigurationError
 from app.accounting.purposes import PURPOSES
 from app.accounting.templates import TemplateConfigurationError
 from app.auth.dependencies import require_session
+from app.documents.pdf_images import poppler_available
 from app.google.sheets_service import GoogleSheetsNotConfiguredError
 
 
@@ -109,6 +110,7 @@ async def config_health(request: Request, session=Depends(require_session)):
         "mapping_master": "MISSING",
         "drive_root": "MISSING",
         "gemini": "CONFIGURED" if settings.gemini_api_key else "MISSING",
+        "pdf_processing": "READY" if poppler_available(settings.poppler_path) else "MISSING",
     }
 
     for table_key, status_key in [

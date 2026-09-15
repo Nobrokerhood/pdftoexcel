@@ -41,6 +41,17 @@ class Settings:
     google_login_audit_sheet_name: str
     google_api_usage_sheet_name: str
     cors_allowed_origins: tuple[str, ...]
+    # Temporary second key, used only when the primary project hits its spending cap
+    # and GEMINI_FALLBACK_ENABLED is true.
+    gemini_api_key_fallback: str | None = None
+    gemini_fallback_enabled: bool = False
+    # Folder containing Poppler's pdfinfo/pdftoppm; when unset they must be on PATH.
+    poppler_path: str | None = None
+    environment: str = "development"
+    debug: bool = False
+    log_level: str = "INFO"
+    enable_docs: bool = True
+    google_shared_drive_id: str | None = None
 
 
 def _flag(value: str | None) -> bool:
@@ -99,4 +110,38 @@ def get_settings() -> Settings:
         cors_allowed_origins=(
             _split_csv(configured_origins) if configured_origins else default_origins
         ),
+        gemini_api_key_fallback=os.getenv("GEMINI_API_KEY_FALLBACK"),
+        gemini_fallback_enabled=_flag(os.getenv("GEMINI_FALLBACK_ENABLED")),
+        poppler_path=(os.getenv("POPPLER_PATH") or "").strip() or None,
+        environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
+        debug=_flag(os.getenv("DEBUG", "false")),
+        log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
+        enable_docs=_flag(os.getenv("ENABLE_DOCS", "false" if os.getenv("ENVIRONMENT") == "production" else "true")),
+        google_shared_drive_id=(os.getenv("GOOGLE_SHARED_DRIVE_ID") or "").strip() or None,
     )
+
+
+def validate_production_config(settings: Settings) -> list[str]:
+    """
+    Validates mandatory settings when running in production mode.
+    Does NOT require GOOGLE_DRIVE_ROOT_FOLDER_ID (preserves purpose-specific folders in Shared Drive).
+    """
+    if settings.environment != "production":
+        return []
+
+    errors: list[str] = []
+    if not settings.gemini_api_key:
+        errors.append("GEMINI_API_KEY is required in production.")
+    if not settings.google_client_id:
+        errors.append("GOOGLE_CLIENT_ID is required in production.")
+    if not (settings.google_service_account_json or settings.google_service_account_file):
+        errors.append("Google Service Account credentials (GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE) are required in production.")
+    if not settings.google_accounting_spreadsheet_id:
+        errors.append("GOOGLE_ACCOUNTING_SPREADSHEET_ID is required in production.")
+    if settings.allow_dev_login:
+        errors.append("ALLOW_DEV_LOGIN must be false in production.")
+    if any(origin.strip() == "*" for origin in settings.cors_allowed_origins):
+        errors.append("CORS_ALLOWED_ORIGINS cannot contain '*' wildcard in production.")
+
+    return errors
+

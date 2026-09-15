@@ -1,125 +1,137 @@
-main.py to run this use the below code line<br>
-**uvicorn main:app --reload --port 8000**
-<img width="987" height="285" alt="image" src="https://github.com/user-attachments/assets/dea7c5f1-496e-402c-996d-a4c098cbdfac" />
+# NoBrokerHood (NBH) Accounting AI
 
+Production-grade automated document accounting engine for NoBrokerHood society and apartment management. Converts unstructured financial documents (bank receipts, vendor bills, petty cash registers, handwritten statements) into validated, schema-compliant Excel imports for the NoBrokerHood ERP system.
 
-open and and access the html and to work <br>
-**python3 -m http.server 5000**<br>
-**http://localhost:5000/index.html**
-<img width="987" height="285" alt="image" src="https://github.com/user-attachments/assets/ae16b89d-214d-4693-aea3-8c9305d587c2" />
+---
 
-befor deploying the code to rendar update the basic_URL OCR.HTML file current code "const BASE_URL = "http://localhost:8000";<br>
-delete the function **# ------------------- CORS for Local Dev -------------------**
+## 1. Prerequisites
 
-```
-#**use this code to run this code on local Below**
+- **Python**: Python 3.11 or 3.12 (64-bit recommended)
+- **Poppler Utilities**: Required for PDF rasterization (`pdfinfo`, `pdftoppm`).
+  - **Debian / Ubuntu / Docker**: `sudo apt-get install -y poppler-utils libgl1 libglib2.0-0`
+  - **macOS**: `brew install poppler`
+  - **Windows**: Download Poppler for Windows and set `POPPLER_PATH=C:\path\to\poppler\bin` in `.env` (or add to system `PATH`).
+- **Google Cloud / Workspace Access**:
+  - Google Cloud OAuth 2.0 Web Client ID for `@nobroker.in` Workspace authentication.
+  - Google Service Account with **Content Manager** access to the Shared Drive and **Editor** access to the accounting master spreadsheet.
+  - Google Gemini API key (`gemini-2.5-flash`).
 
-#------------------- CORS for Local Dev -------------------
+---
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+## 2. Quickstart for Developers (Clean Clone)
 
-#Add / update CORS settings for local development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5000",   # where you serve ocr.html (your screenshots)
-        "http://127.0.0.1:5000",
-        "http://localhost:8000",   # backend origin (if frontend served same origin)
-        "http://127.0.0.1:8000",
-        "http://localhost:5500",   # common dev servers
-        "http://127.0.0.1:5500",
-        # "https://nobrokerhood.github.io",   # keep production if needed
-        # "https://nobrokerhood.github.io/pdftoexcel",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-===========================================================================================================
-You will get the login audit and app usage report, new code update <br>
-# file name :- API_Usage_Report <br>
-<img width="987" height="65" alt="image" src="https://github.com/user-attachments/assets/e8d7199e-ae34-4ef4-b13b-f26a97217115" />
-
-
-# file name:- Login_Audit_Report
-<img width="987" height="65" alt="image" src="https://github.com/user-attachments/assets/97ad82ec-079a-44a8-a84c-1578a876ed29" />
-
-
-
-
-
-# **Login Page**
-
-<img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/ca3689a2-348d-4a07-b62a-0bc313cf0378" />
-
-# **Docs OCR Page**
-
-<img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/cc890423-9d24-41eb-aeb7-ab772a13bae7" />
-
-# **🎙️ Voice to Excel Entry**
-
-<img width="1357" height="587" alt="image" src="https://github.com/user-attachments/assets/1e72a741-ccd6-4edd-9e25-4d1df3763263" />
-
-## Accounting AI Workflow
-
-New local backend:
-
-`uvicorn main:app --reload --port 8030`
-
-New frontend:
-
-`python -m http.server 5000`
-
-Open:
-
-`http://127.0.0.1:5000/index.html`
-
-The new `accounting.html` page supports the first workflow shell for:
-
-- `MEMBER_RECEIPT`
-- `VENDOR_INVOICE`
-
-The flow creates a processing job, uploads the original source to Drive,
-runs the LangGraph workflow to mandatory human review, allows edits/mapping
-resolution, and generates XLSX only after approval.
-
-## Live Google Configuration
-
-Use this `.env` file:
-
-`C:\Users\virub\Desktop\genai\AI_Agent\legacy_repos\pdftoexcel\.env`
-
-Required live variables:
-
-```env
-GOOGLE_CLIENT_ID=
-VITE_GOOGLE_CLIENT_ID=
-ALLOWED_EMAIL_DOMAIN=nobroker.in
-GOOGLE_SERVICE_ACCOUNT_FILE=
-GOOGLE_SERVICE_ACCOUNT_JSON=
-GOOGLE_ACCOUNTING_SPREADSHEET_ID=
-GOOGLE_DRIVE_ROOT_FOLDER_ID=
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+### Step 1: Clone the Repository
+```bash
+git clone https://github.com/Nobrokerhood/pdftoexcel.git
+cd pdftoexcel
 ```
 
-Optional legacy per-sheet overrides take priority for their individual tables:
+### Step 2: Create and Activate Virtual Environment
+```bash
+# Linux / macOS
+python3 -m venv .venv
+source .venv/bin/activate
 
-```env
-GOOGLE_USER_MASTER_SHEET_ID=
-GOOGLE_LOGIN_AUDIT_SHEET_ID=
-GOOGLE_SESSION_LOG_SHEET_ID=
-GOOGLE_ACTIVITY_LOG_SHEET_ID=
-GOOGLE_PROCESSING_LOG_SHEET_ID=
-GOOGLE_TEMPLATE_MASTER_SHEET_ID=
-GOOGLE_FOLDER_CONFIG_SHEET_ID=
-GOOGLE_MAPPING_MASTER_SHEET_ID=
-GOOGLE_API_USAGE_SHEET_ID=
+# Windows (PowerShell)
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-Shared spreadsheet tabs are documented in `docs/LIVE_GOOGLE_SETUP.md`.
-Run `python tools/bootstrap_google_resources.py --check` before live use.
+### Step 3: Install Dependencies
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
+### Step 4: Configure Environment Variables
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Open `.env` and fill in your development or test credentials:
+- `GEMINI_API_KEY`: Your Gemini API key.
+- `GOOGLE_CLIENT_ID`: Your Google OAuth 2.0 Client ID.
+- `GOOGLE_SERVICE_ACCOUNT_JSON` (or `GOOGLE_SERVICE_ACCOUNT_FILE` pointing to your service account key file).
+- `GOOGLE_ACCOUNTING_SPREADSHEET_ID`: Spreadsheet ID for configuration, templates, and logs.
+- `GOOGLE_SHARED_DRIVE_ID`: Google Workspace Shared Drive ID.
 
+### Step 5: Start Backend Server
+```bash
+uvicorn main:app --host 127.0.0.1 --port 8030 --reload
+```
+Check health:
+```bash
+curl http://127.0.0.1:8030/health
+```
+
+### Step 6: Start Frontend Server
+In a separate terminal:
+```bash
+python -m http.server 5000 --bind 127.0.0.1
+```
+Open your browser at `http://127.0.0.1:5000/index.html`.
+
+---
+
+## 3. Environment Profiles
+
+| Setting | Local Development | Staging | Production |
+|---|---|---|---|
+| `ENVIRONMENT` | `development` | `staging` | `production` |
+| `DEBUG` | `true` | `false` | `false` |
+| `ENABLE_DOCS` | `true` (`/docs` available) | `true` | `false` (gated) |
+| `ALLOW_DEV_LOGIN` | `true` or `false` | `false` | `false` (enforced fail-fast) |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5000` | Staging Web Domain | Production Web Domain (No `*`) |
+| `Google OAuth Origins` | `http://localhost:5000` | Staging Web Domain | `https://accounting.nobrokerhood.com` |
+
+---
+
+## 4. Running Tests
+
+Run the complete test suite:
+```bash
+pytest -q
+```
+Expected: `126 passed, 0 failed, 3 warnings`.
+
+Run specific test modules:
+```bash
+# Production readiness and security tests
+pytest tests/test_production_readiness.py -v
+
+# Handwritten document understanding & reconciliation benchmark
+pytest tests/test_handwritten_document_understanding.py -v
+
+# Optional unmapped bill head approval tests
+pytest tests/test_unmapped_approval.py -v
+```
+
+---
+
+## 5. Docker Deployment
+
+Build and run using the production Dockerfile:
+```bash
+# Build
+docker build -t nbh-accounting-ai:latest .
+
+# Run
+docker run -d \
+  --name nbh-accounting-ai \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --env-file .env \
+  nbh-accounting-ai:latest
+```
+
+Verify health:
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/readiness
+```
+
+---
+
+## 6. Production Operations & Architecture
+
+For complete enterprise production deployment details, Google Cloud/Workspace configuration steps, Nginx reverse-proxy setup, and incident runbooks, see [`DEPLOYMENT.md`](./DEPLOYMENT.md).

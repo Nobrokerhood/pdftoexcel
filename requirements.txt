@@ -12,6 +12,8 @@ python-multipart
 gspread
 google-auth
 langgraph
+rapidocr-onnxruntime
+onnxruntime
 
 # Knowledge Base Dependencies (ADD THESE 4 LINES)
 sentence-transformers

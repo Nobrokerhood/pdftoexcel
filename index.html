@@ -96,10 +96,10 @@
   </main>
 
   <script>
-    const BASE_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-      ? "http://127.0.0.1:8030"
-      : "https://pdftoexcel-846x.onrender.com";
-    const FALLBACK_GOOGLE_CLIENT_ID = "414963441128-69gsdlfdfn8hrf7ovgc9mfh10spnc5nq.apps.googleusercontent.com";
+    const BASE_URL = window.__API_BASE__ ||
+      ((location.hostname === "localhost" || location.hostname === "127.0.0.1")
+        ? "http://127.0.0.1:8030"
+        : "");
 
     async function loadPublicConfig() {
       try {
@@ -107,7 +107,7 @@
         if (!res.ok) throw new Error("Config unavailable");
         return await res.json();
       } catch (error) {
-        return { google_client_id: FALLBACK_GOOGLE_CLIENT_ID };
+        return null;
       }
     }
 
@@ -170,7 +170,13 @@
     }
 
     loadPublicConfig().then((config) => {
-      renderGoogleButton(config.google_client_id || FALLBACK_GOOGLE_CLIENT_ID);
+      if (config && config.google_client_id) {
+        renderGoogleButton(config.google_client_id);
+      } else {
+        const status = document.getElementById("status");
+        status.textContent = "Google OAuth client is not configured on the server.";
+        status.className = "status";
+      }
     });
   </script>
 </body>

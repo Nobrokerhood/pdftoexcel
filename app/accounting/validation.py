@@ -33,6 +33,98 @@ class AccountingValidationService:
 
     def _member_receipt(self, data: dict) -> ValidationResult:
         issues = []
+        rows = data.get("rows")
+
+        if isinstance(rows, list) and len(rows) > 1:
+            seen_refs = {}
+            doc_type = data.get("document_type")
+            if doc_type and doc_type in {"VENDOR_INVOICE", "PETTY_CASH_REGISTER"}:
+                issues.append(
+                    ValidationIssue(
+                        field="document_type",
+                        severity="WARNING",
+                        code="PURPOSE_MISMATCH",
+                        message=f"Document appears to be {doc_type}, but is being processed as MEMBER_RECEIPT.",
+                    )
+                )
+
+            for idx, row in enumerate(rows, start=1):
+                if not isinstance(row, dict):
+                    issues.append(
+                        ValidationIssue(
+                            field=f"rows[{idx}]",
+                            severity="CRITICAL",
+                            code="INVALID_ROW_FORMAT",
+                            message=f"Row {idx} is not a valid transaction object.",
+                        )
+                    )
+                    continue
+
+                # Check Amount
+                amt_str = row.get("Amount*", "-")
+                if amt_str not in {None, "", "-"}:
+                    amt = _amount(amt_str)
+                    if amt is None:
+                        issues.append(
+                            ValidationIssue(
+                                field=f"rows[{idx}].Amount*",
+                                severity="CRITICAL",
+                                code="INVALID_AMOUNT",
+                                row=idx,
+                                current_value=amt_str,
+                                message=f"Row {idx}: Amount '{amt_str}' is not a valid number.",
+                            )
+                        )
+                    elif amt < 0:
+                        issues.append(
+                            ValidationIssue(
+                                field=f"rows[{idx}].Amount*",
+                                severity="WARNING",
+                                code="NEGATIVE_AMOUNT",
+                                row=idx,
+                                current_value=str(amt),
+                                message=f"Row {idx}: Amount {amt} is negative.",
+                            )
+                        )
+
+                # Check invalid placeholder strings
+                for col_name, val in row.items():
+                    if isinstance(val, str) and val.strip() in {"null", "None", "NaN", "undefined", "UNKNOWN"}:
+                        issues.append(
+                            ValidationIssue(
+                                field=f"rows[{idx}].{col_name}",
+                                severity="WARNING",
+                                code="INVALID_PLACEHOLDER",
+                                row=idx,
+                                current_value=val,
+                                message=f"Row {idx}: Field '{col_name}' contains placeholder '{val}'; should be '-'.",
+                            )
+                        )
+
+                # Check duplicate references
+                ref = row.get("Cheque/Ref No*", "-")
+                if ref not in {None, "", "-"}:
+                    if ref in seen_refs:
+                        seen_refs[ref].append(idx)
+                    else:
+                        seen_refs[ref] = [idx]
+
+            # Report duplicates
+            for ref_val, row_indices in seen_refs.items():
+                if len(row_indices) > 1:
+                    issues.append(
+                        ValidationIssue(
+                            field="Cheque/Ref No*",
+                            severity="WARNING",
+                            code="DUPLICATE_REFERENCE",
+                            message=f"Reference '{ref_val}' appears in multiple rows: {row_indices}.",
+                        )
+                    )
+
+            has_critical = any(issue.severity == "CRITICAL" for issue in issues)
+            return ValidationResult(status="BLOCKED" if has_critical else "PASSED", issues=issues)
+
+        # Single-record fallback
         amount = _amount(data.get("amount"))
         if amount is None:
             issues.append(ValidationIssue(field="amount", severity="CRITICAL", message="Payment amount is required."))

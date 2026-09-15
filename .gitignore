@@ -37,6 +37,7 @@ kb_store.json
 *.log
 tmp/
 temp/
+scratch/
 
 # OS and editor files
 .DS_Store
