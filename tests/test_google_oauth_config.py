@@ -196,3 +196,45 @@ def test_production_config_diagnostic_safe_booleans_only():
     assert diag["google_client_id_format_valid"] is True
     assert diag["gemini_configured"] is True
     assert diag["session_secret_configured"] is True
+
+
+def test_auth_endpoints_return_401_for_missing_or_invalid_session():
+    settings = _base_test_settings()
+    client = _test_client(settings)
+
+    # Missing token
+    res = client.get("/auth/me")
+    assert res.status_code == 401
+
+    res = client.post("/auth/heartbeat", json={"user_active": True, "page_visible": True})
+    assert res.status_code == 401
+
+    # Invalid token
+    res = client.get("/auth/me", headers={"Authorization": "Bearer bad_token_xyz"})
+    assert res.status_code == 401
+
+
+def test_auth_endpoints_return_403_for_dev_login_when_disabled():
+    settings = _base_test_settings(
+        allow_dev_login=False,
+    )
+    client = _test_client(settings)
+    res = client.post("/auth/dev-login", json={"email": "dev@nobroker.in"})
+    assert res.status_code == 403
+    assert res.json()["detail"] == "DEV_LOGIN_DISABLED"
+
+
+
+def test_production_gemini_and_ocr_config_invariants():
+    settings = _base_test_settings(
+        gemini_model="gemini-2.5-flash",
+    )
+    assert settings.gemini_model == "gemini-2.5-flash"
+
+    client = _test_client(settings)
+    res = client.get("/readiness")
+    assert res.status_code == 200
+    data = res.json()
+    assert "rapidocr_ready" in data["checks"]
+    assert data["checks"]["rapidocr_ready"] is True
+

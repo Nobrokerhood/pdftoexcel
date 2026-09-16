@@ -271,6 +271,17 @@ class AccountingWorkflow:
             job.overall_status = "NEEDS_REVIEW"
         job.current_step = "HUMAN_REVIEW"
         self.lifecycle_service.update(job, human_status="NEEDS_REVIEW", overall_status=job.overall_status, current_step="HUMAN_REVIEW")
+
+        audit_summary = {
+            "document_classification": job.extracted_data.get("document_type", job.purpose) if isinstance(job.extracted_data, dict) else job.purpose,
+            "gemini_extraction_status": job.extraction_status,
+            "verification_status": job.verification_status,
+            "number_of_extracted_rows": len(job.extracted_data.get("rows", [])) if isinstance(job.extracted_data, dict) else 0,
+            "validation_status": job.validation_status,
+            "overall_status": job.overall_status,
+        }
+        logger.info("ACCURACY_AUDIT [job=%s, purpose=%s]: %s", job.job_id, job.purpose, audit_summary)
+
         return {
             "human_status": "NEEDS_REVIEW",
             "overall_status": job.overall_status,

@@ -75,7 +75,7 @@ def get_settings() -> Settings:
     return Settings(
         google_client_id=(os.getenv("GOOGLE_CLIENT_ID") or "").strip() or None,
         allowed_email_domain=os.getenv("ALLOWED_EMAIL_DOMAIN", "nobroker.in"),
-        allow_domain_wide_access=_flag(os.getenv("ALLOW_DOMAIN_WIDE_ACCESS")),
+        allow_domain_wide_access=_flag(os.getenv("ALLOW_DOMAIN_WIDE_ACCESS", "true")),
         session_inactivity_seconds=int(os.getenv("SESSION_INACTIVITY_SECONDS", "1200")),
         session_heartbeat_grace_seconds=int(
             os.getenv("SESSION_HEARTBEAT_GRACE_SECONDS", "120")

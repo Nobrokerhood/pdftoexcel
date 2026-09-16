@@ -103,16 +103,23 @@
             ? "https://pdftoexcel-846x.onrender.com"
             : ""));
 
-    async function loadPublicConfig() {
-      try {
-        const res = await fetch(BASE_URL + "/config/public");
-        if (!res.ok) {
+    async function loadPublicConfig(retries = 3) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch(BASE_URL + "/config/public");
+          if (res.ok) {
+            return await res.json();
+          }
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || "Google OAuth client is not configured on the server.");
+          if (attempt === retries) {
+            return { error: errData.detail || "Google OAuth client is not configured on the server." };
+          }
+        } catch (error) {
+          if (attempt === retries) {
+            return { error: error.message || "Google OAuth client is not configured on the server." };
+          }
         }
-        return await res.json();
-      } catch (error) {
-        return { error: error.message || "Google OAuth client is not configured on the server." };
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
 

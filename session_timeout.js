@@ -16,6 +16,11 @@ function resetLogoutTimer() {
   clearTimeout(logoutTimer);
 
   logoutTimer = setTimeout(() => {
+    // If a document is currently actively processing, do not log out
+    if (window.__ACCOUNTING_JOB_ACTIVE__) {
+      resetLogoutTimer();
+      return;
+    }
     alert("Session expired due to inactivity. Please login again.");
     logoutFromSession();
   }, INACTIVITY_LIMIT);
@@ -26,12 +31,16 @@ function resetLogoutTimer() {
 });
 
 document.addEventListener("visibilitychange", () => {
-  userActive = !document.hidden;
+  if (!document.hidden) {
+    userActive = true;
+  }
 });
 
 async function heartbeat() {
   const token = sessionStorage.getItem("accounting_session_token");
   if (!token) return;
+
+  const isActive = userActive || !!window.__ACCOUNTING_JOB_ACTIVE__;
 
   try {
     const response = await fetch(API_BASE_URL + "/auth/heartbeat", {
@@ -41,15 +50,24 @@ async function heartbeat() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        user_active: userActive,
+        user_active: isActive,
         page_visible: !document.hidden
       })
     });
     if (response.status === 401) {
-      logoutFromSession();
+      try {
+        const verifyRes = await fetch(API_BASE_URL + "/auth/me", {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        if (verifyRes.status === 401) {
+          logoutFromSession();
+        }
+      } catch (err) {
+        console.warn("Auth verification network error:", err);
+      }
     }
   } catch (error) {
-    console.warn("Heartbeat failed.");
+    console.warn("Heartbeat network warning (will retry on next tick):", error);
   } finally {
     userActive = false;
   }

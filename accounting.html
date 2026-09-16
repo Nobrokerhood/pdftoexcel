@@ -1054,8 +1054,17 @@
         headers: { ...(options.headers || {}), "Authorization": "Bearer " + token }
       });
       if (res.status === 401) {
-        sessionStorage.clear();
-        window.location.href = "index.html";
+        try {
+          const verify = await fetch(BASE_URL + "/auth/me", {
+            headers: { "Authorization": "Bearer " + token }
+          });
+          if (verify.status === 401) {
+            sessionStorage.clear();
+            window.location.href = "index.html";
+          }
+        } catch (e) {
+          console.warn("Auth verification network error:", e);
+        }
       }
       return res;
     }
@@ -1141,6 +1150,7 @@
       form.append("purpose", purpose);
       form.append("file", file);
 
+      window.__ACCOUNTING_JOB_ACTIVE__ = true;
       try {
         const res = await api("/processing/jobs", {
           method: "POST",
@@ -1154,6 +1164,7 @@
       } catch (err) {
         setStatus(err.message);
       } finally {
+        window.__ACCOUNTING_JOB_ACTIVE__ = false;
         startBtn.disabled = false;
       }
     }
