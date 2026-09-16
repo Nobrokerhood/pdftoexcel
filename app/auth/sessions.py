@@ -1,6 +1,10 @@
-import secrets
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import hmac
+import json
+import secrets
 
 from app.auth.user_master import AuthorizedUser
 from app.core.config import Settings
@@ -52,11 +56,29 @@ class SessionService:
         self._sessions_by_token: dict[str, SessionRecord] = {}
         self._tokens_by_session_id: dict[str, str] = {}
 
+    def _sign_token(self, session_id: str, user: AuthorizedUser, now: datetime) -> str:
+        secret = (self.settings.session_secret or "").strip()
+        if not secret:
+            return secrets.token_urlsafe(32)
+        payload = json.dumps({
+            "sid": session_id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "login_at": iso(now),
+            "ts": int(now.timestamp()),
+        })
+        b64_payload = base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+        sig = hmac.new(secret.encode("utf-8"), b64_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return f"nbh_{b64_payload}_{sig}"
+
     def create_session(self, user: AuthorizedUser) -> SessionRecord:
         now = utc_now()
+        session_id = secrets.token_urlsafe(24)
+        token = self._sign_token(session_id, user, now)
         session = SessionRecord(
-            session_id=secrets.token_urlsafe(24),
-            token=secrets.token_urlsafe(32),
+            session_id=session_id,
+            token=token,
             email=user.email,
             name=user.name,
             role=user.role,
@@ -68,10 +90,51 @@ class SessionService:
         self._tokens_by_session_id[session.session_id] = session.token
         return session
 
+    def _recover_signed_session(self, token: str) -> SessionRecord | None:
+        secret = (self.settings.session_secret or "").strip()
+        if not secret or not token.startswith("nbh_"):
+            return None
+        parts = token.split("_")
+        if len(parts) != 3:
+            return None
+        _, b64_payload, sig = parts
+        expected_sig = hmac.new(secret.encode("utf-8"), b64_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected_sig, sig):
+            return None
+
+        try:
+            padding = (4 - len(b64_payload) % 4) % 4
+            raw_json = base64.urlsafe_b64decode(b64_payload + "=" * padding)
+            data = json.loads(raw_json)
+            now = utc_now()
+            ts = data.get("ts", 0)
+            if (now.timestamp() - ts) > max(self.settings.session_inactivity_seconds * 3, 86400):
+                return None
+
+            login_at = datetime.fromisoformat(data["login_at"]) if data.get("login_at") else now
+            session = SessionRecord(
+                session_id=data["sid"],
+                token=token,
+                email=data["email"],
+                name=data.get("name", ""),
+                role=data.get("role", "USER"),
+                login_at=login_at,
+                last_seen_at=now,
+                last_activity_at=now,
+                status="ACTIVE",
+            )
+            self._sessions_by_token[token] = session
+            self._tokens_by_session_id[session.session_id] = token
+            return session
+        except Exception:
+            return None
+
     def get_session(self, token: str | None) -> SessionRecord:
         if not token:
             raise SessionError("Missing session token.")
         session = self._sessions_by_token.get(token)
+        if not session:
+            session = self._recover_signed_session(token)
         if not session:
             raise SessionError("Invalid session token.")
         if session.status != "ACTIVE":
@@ -103,3 +166,4 @@ class SessionService:
         session.logout_at = utc_now()
         session.status = "LOGGED_OUT"
         return session
+
