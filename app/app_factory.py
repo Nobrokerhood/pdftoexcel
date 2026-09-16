@@ -1,8 +1,10 @@
 import logging
+from pathlib import Path
 import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 import uuid
 
@@ -37,6 +39,7 @@ from app.workflows.accounting_graph import AccountingWorkflow
 
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def create_app(
@@ -215,8 +218,15 @@ def create_app(
             },
         }
 
-    @app.get("/")
-    def root():
-        return {"message": "NoBrokerHood PDF to Excel & Split API running."}
+    @app.get("/", include_in_schema=False)
+    @app.get("/index.html", include_in_schema=False)
+    def login_page():
+        return FileResponse(PROJECT_ROOT / "index.html")
+
+    @app.get("/{page_name}", include_in_schema=False)
+    def frontend_page(page_name: str):
+        if page_name not in {"accounting.html", "ocr.html", "voice.html", "session_timeout.js"}:
+            raise HTTPException(status_code=404, detail="Not Found")
+        return FileResponse(PROJECT_ROOT / page_name)
 
     return app
