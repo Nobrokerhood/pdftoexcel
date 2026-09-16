@@ -380,6 +380,8 @@ class DocumentOcrService:
         self.cache_size = cache_size
         self._cache: OrderedDict[str, DocumentRepresentation] = OrderedDict()
         self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
 
     def status(self) -> dict:
         return {
@@ -388,6 +390,8 @@ class DocumentOcrService:
                 "engine": self.secondary.name if self.secondary else None,
                 "available": bool(self.secondary and self.secondary.available()),
             },
+            "cache_hits": self.hits,
+            "cache_misses": self.misses,
         }
 
     def page_images(self, data: bytes) -> list[Image.Image]:
@@ -395,7 +399,14 @@ class DocumentOcrService:
 
     def cached(self, sha256: str) -> DocumentRepresentation | None:
         with self._lock:
-            return self._cache.get(sha256)
+            cached_item = self._cache.get(sha256)
+            if cached_item:
+                self.hits += 1
+                logger.debug("OCR_REUSE_HIT: sha256=%s (total hits=%d)", sha256[:12], self.hits)
+                return cached_item
+            self.misses += 1
+            logger.debug("OCR_REUSE_MISS: sha256=%s (total misses=%d)", sha256[:12], self.misses)
+            return None
 
     def remember(self, representation: DocumentRepresentation):
         sha = representation.manifest.get("sha256")
