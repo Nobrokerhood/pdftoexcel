@@ -90,6 +90,12 @@
 
     <div class="signin-container">
       <div id="googleSignIn"></div>
+      <div id="devSignIn" style="display:none; margin-top: 18px; width: 260px;">
+        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">— Local Dev Bypass —</div>
+        <button id="devLoginBtn" type="button" style="width: 100%; padding: 10px 14px; background: #0f766e; color: #ffffff; border: none; border-radius: 6px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          Dev Sign-in as Mihir
+        </button>
+      </div>
     </div>
 
     <div class="status" id="status" role="status" aria-live="polite"></div>
@@ -188,6 +194,46 @@
         const status = document.getElementById("status");
         status.textContent = (config && config.error) || "Google OAuth client is not configured on the server.";
         status.className = "status";
+      }
+
+      if (config && config.allow_dev_login) {
+        const devSection = document.getElementById("devSignIn");
+        if (devSection) {
+          devSection.style.display = "block";
+          const devBtn = document.getElementById("devLoginBtn");
+          if (devBtn) {
+            devBtn.onclick = async () => {
+              const status = document.getElementById("status");
+              status.textContent = "Signing in as local developer...";
+              status.className = "status ok";
+              try {
+                const res = await fetch(BASE_URL + "/auth/dev-login", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email: "brahmaniya.mihir@nobroker.in", name: "Mihir Brahmaniya" })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                  status.textContent = data.detail || "Dev login failed.";
+                  status.className = "status";
+                  return;
+                }
+                sessionStorage.setItem("accounting_session_token", data.session_token);
+                sessionStorage.setItem("accounting_session_id", data.session_id);
+                sessionStorage.setItem("nobroker_user", data.email);
+                sessionStorage.setItem("accounting_user", JSON.stringify({
+                  email: data.email,
+                  name: data.name,
+                  role: data.role
+                }));
+                window.location.href = "accounting.html?v=light-ui";
+              } catch (err) {
+                status.textContent = "Dev sign-in error: " + err.message;
+                status.className = "status";
+              }
+            };
+          }
+        }
       }
     });
   </script>

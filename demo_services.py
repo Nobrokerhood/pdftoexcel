@@ -31,7 +31,12 @@ def settings(max_retries=2) -> Settings:
         google_drive_root_folder_id="root",
         google_login_audit_sheet_name="Accounting_AI_Login_Audit",
         google_api_usage_sheet_name="API_Usage_Report",
-        cors_allowed_origins=("http://localhost:5000",),
+        cors_allowed_origins=(
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+            "http://localhost:8031",
+            "http://127.0.0.1:8031",
+        ),
     )
 
 

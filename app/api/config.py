@@ -23,6 +23,7 @@ async def public_config(request: Request):
         "application_name": "Accounting AI",
         "google_client_id": settings.google_client_id,
         "allowed_email_domain": settings.allowed_email_domain,
+        "allow_dev_login": bool(settings.allow_dev_login and settings.environment != "production"),
         "features": {
             "member_receipt": True,
             "vendor_invoice": True,

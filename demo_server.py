@@ -16,6 +16,10 @@ app = create_app(settings=settings(), sheets_service=FakeSheetsService(records()
     drive_service=FakeDriveService(), google_token_verifier=FakeVerifier(),
     extraction_provider=StaticExtractionProvider({'MEMBER_RECEIPT': MEMBER_DATA, 'VENDOR_INVOICE': VENDOR_DATA}),
     verification_provider=StaticVerificationProvider(), repair_provider=StaticRepairProvider(MEMBER_DATA))
+app.router.routes = [
+    r for r in app.router.routes
+    if getattr(r, "path", None) not in {"/", "/index.html", "/accounting.html", "/session_timeout.js"}
+]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'testserver'])
 
 @app.middleware('http')
@@ -35,6 +39,7 @@ def demo_login():
     session = app.state.session_service.create_session(user)
     return {**session.public_dict(), 'session_token':session.token}
 
+@app.get('/', response_class=HTMLResponse)
 @app.get('/index.html', response_class=HTMLResponse)
 def entry():
     return '''<!doctype html><html><head><title>Accounting AI | Local demo</title>
