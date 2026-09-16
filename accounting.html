@@ -5,25 +5,29 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Accounting AI</title>
+  <title>NoBrokerHood Accounting AI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     :root {
-      --bg: #f6f8fb;
+      --bg: #f8fafc;
       --panel: #ffffff;
-      --text: #172033;
-      --muted: #607089;
-      --line: #d9e1ec;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
       --primary: #0f766e;
       --primary-dark: #115e59;
-      --danger: #b42318;
-      --warn: #9a6700;
+      --primary-light: #f0fdfa;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --warn: #d97706;
+      --warn-bg: #fffbeb;
+      --ok: #16a34a;
+      --ok-bg: #f0fdf4;
+      --info-bg: #eff6ff;
+      --info-text: #1d4ed8;
       --focus: #2563eb;
-      --field: #fbfcfe;
-      --ok-bg: #e8f5f2;
-      --warn-bg: #fff7df;
-      --bad-bg: #fff0ef;
-      --info-bg: #eef6ff;
+      --field: #ffffff;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
 
     * { box-sizing: border-box; }
@@ -33,52 +37,63 @@
       min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      font-family: var(--font);
       line-height: 1.5;
+      font-size: 14px;
     }
 
     .layout {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: 232px minmax(0, 1fr);
+      grid-template-columns: 240px minmax(0, 1fr);
     }
 
     aside {
       background: var(--panel);
       border-right: 1px solid var(--line);
-      padding: 24px 18px;
+      padding: 24px 16px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 20px;
     }
 
-    .brand { width: 160px; }
-
-    nav { display: grid; gap: 6px; }
-
-    nav a,
-    .logout,
-    button {
-      min-height: 44px;
-      border-radius: 6px;
-      cursor: pointer;
-      font: inherit;
+    .brand {
+      width: 160px;
+      margin-bottom: 8px;
     }
 
+    nav {
+      display: grid;
+      gap: 6px;
+    }
+
+    nav button,
     nav a,
     .logout {
+      min-height: 42px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
       display: flex;
       align-items: center;
-      padding: 0 12px;
+      padding: 0 14px;
       color: var(--text);
       text-decoration: none;
       border: 0;
       background: transparent;
       text-align: left;
+      font-weight: 500;
+      transition: all 0.15s ease;
     }
 
+    nav button:hover,
+    nav a:hover {
+      background: #f1f5f9;
+    }
+
+    nav button.active,
     nav a.active {
-      background: var(--ok-bg);
+      background: var(--primary-light);
       color: var(--primary-dark);
       font-weight: 700;
     }
@@ -87,121 +102,189 @@
       margin-top: auto;
       color: var(--danger);
     }
+    .logout:hover {
+      background: var(--danger-bg);
+    }
 
-    main { padding: 24px; }
+    main {
+      padding: 28px;
+      max-width: 1440px;
+      margin: 0 auto;
+      width: 100%;
+    }
 
-    .topbar,
-    .actions,
-    .review-actions {
+    .topbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
+      margin-bottom: 24px;
       flex-wrap: wrap;
     }
 
-    .topbar { margin-bottom: 18px; }
-
     h1 {
       margin: 0;
-      font-size: 28px;
-      letter-spacing: 0;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
     }
 
     h2 {
-      margin: 0 0 14px;
+      margin: 0 0 16px;
       font-size: 18px;
-      letter-spacing: 0;
+      font-weight: 700;
+      letter-spacing: -0.01em;
     }
 
-    .user {
+    .user-tag {
       color: var(--muted);
-      font-size: 14px;
-      text-align: right;
+      font-size: 13px;
+      background: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-weight: 500;
     }
 
-    .workspace {
-      display: grid;
-      grid-template-columns: minmax(300px, 430px) minmax(360px, 1fr);
-      gap: 16px;
-      align-items: start;
-    }
-
-    .review-grid {
-      display: grid;
-      grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.1fr);
-      gap: 16px;
-      align-items: start;
-      margin-top: 16px;
-    }
-
+    /* Cards & Panels */
     section,
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 18px;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      margin-bottom: 20px;
     }
 
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 460px) minmax(360px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    /* Summary Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-card .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .stat-card .value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .stat-card.attention .value { color: var(--warn); }
+    .stat-card.unsaved .value { color: var(--primary); }
+
+    /* Form Inputs */
     label {
       display: block;
-      color: var(--muted);
+      color: #334155;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
       margin-bottom: 6px;
     }
 
-    .field { margin-bottom: 14px; }
+    .field { margin-bottom: 16px; }
 
     select,
     input[type="text"],
     input[type="file"],
     textarea {
       width: 100%;
-      min-height: 44px;
+      min-height: 42px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 8px;
       background: var(--field);
       color: var(--text);
-      padding: 10px 12px;
+      padding: 9px 12px;
       font: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
-    textarea {
-      min-height: 92px;
-      resize: vertical;
-      font-family: Consolas, monospace;
-      font-size: 13px;
+    select:focus,
+    input[type="text"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
 
     input[readonly] {
-      color: #334155;
-      background: #eef3f8;
+      background: #f8fafc;
+      color: #475569;
+      cursor: default;
+    }
+
+    /* Buttons */
+    button {
+      min-height: 40px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 16px;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
     }
 
     button.primary {
-      border: 0;
-      padding: 0 16px;
       background: var(--primary);
       color: white;
-      font-weight: 700;
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--primary-dark);
     }
 
-    button.primary:hover { background: var(--primary-dark); }
-
     button.secondary {
-      border: 1px solid var(--line);
-      padding: 0 14px;
       background: var(--panel);
+      border-color: var(--line);
       color: var(--text);
+    }
+    button.secondary:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #cbd5e1;
     }
 
     button.danger {
-      border: 1px solid #f0b4ae;
-      padding: 0 14px;
-      background: var(--bad-bg);
+      background: var(--danger-bg);
+      border-color: #fecaca;
       color: var(--danger);
-      font-weight: 700;
+    }
+    button.danger:hover:not(:disabled) {
+      background: #fee2e2;
+    }
+
+    button.success {
+      background: var(--ok-bg);
+      border-color: #bbf7d0;
+      color: var(--ok);
     }
 
     button:disabled {
@@ -209,272 +292,753 @@
       cursor: not-allowed;
     }
 
-    :focus-visible {
-      outline: 3px solid var(--focus);
-      outline-offset: 2px;
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+      background: #f8fafc;
     }
 
-    .status {
-      min-height: 24px;
-      color: var(--muted);
-      font-size: 14px;
-      margin-top: 12px;
+    .badge.ok {
+      background: var(--ok-bg);
+      border-color: #bbf7d0;
+      color: #15803d;
+    }
+    .badge.warn {
+      background: var(--warn-bg);
+      border-color: #fde68a;
+      color: #b45309;
+    }
+    .badge.bad {
+      background: var(--danger-bg);
+      border-color: #fecaca;
+      color: #b91c1c;
+    }
+    .badge.info {
+      background: var(--info-bg);
+      border-color: #bfdbfe;
+      color: var(--info-text);
     }
 
-    .status.error { color: var(--danger); }
-    .status.ok { color: var(--primary-dark); }
-
-    .progress {
+    /* Progress Checklist */
+    .progress-list {
       display: grid;
-      gap: 8px;
+      gap: 10px;
       margin: 0;
       padding: 0;
       list-style: none;
     }
 
-    .progress li,
-    .badge {
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 14px;
+    .progress-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      border-radius: 8px;
       border: 1px solid var(--line);
       background: #f8fafc;
+      font-weight: 500;
     }
 
-    .progress li.done,
-    .badge.ok {
-      border-color: #b7ddd5;
+    .progress-item.done {
       background: var(--ok-bg);
+      border-color: #bbf7d0;
+      color: #15803d;
+    }
+    .progress-item.attention {
+      background: var(--warn-bg);
+      border-color: #fde68a;
+      color: #b45309;
+    }
+    .progress-item.failed {
+      background: var(--danger-bg);
+      border-color: #fecaca;
+      color: #b91c1c;
+    }
+
+    /* Banners */
+    .alert-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      border: 1px solid transparent;
+    }
+
+    .alert-banner.warn {
+      background: var(--warn-bg);
+      border-color: #fde68a;
+      color: #92400e;
+    }
+    .alert-banner.danger {
+      background: var(--danger-bg);
+      border-color: #fecaca;
+      color: #991b1b;
+    }
+    .alert-banner.info {
+      background: var(--info-bg);
+      border-color: #bfdbfe;
+      color: #1e40af;
+    }
+
+    .alert-banner h4 {
+      margin: 0 0 4px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .alert-banner p {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    /* Spreadsheet Grid */
+    .grid-container {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 20px;
+    }
+
+    .grid-toolbar {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      background: #fafbfc;
+    }
+
+    .search-box {
+      position: relative;
+      min-width: 260px;
+    }
+
+    .search-box input {
+      min-height: 36px;
+      padding-left: 32px;
+      font-size: 13px;
+      border-radius: 6px;
+    }
+
+    .search-box span.icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .filter-btn {
+      min-height: 34px;
+      padding: 0 12px;
+      font-size: 13px;
+      border-radius: 6px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .filter-btn.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
       color: var(--primary-dark);
     }
 
-    .badge.warn {
-      border-color: #f3d383;
-      background: var(--warn-bg);
-      color: var(--warn);
+    .table-scroll {
+      max-height: 480px;
+      overflow: auto;
     }
 
-    .badge.bad {
-      border-color: #f0b4ae;
-      background: var(--bad-bg);
-      color: var(--danger);
-    }
-
-    .summary {
-      display: grid;
-      gap: 10px;
-      font-size: 14px;
-    }
-
-    .summary div {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      border-bottom: 1px solid var(--line);
-      padding-bottom: 8px;
-    }
-
-    .summary span:first-child { color: var(--muted); }
-    .summary span:last-child { font-weight: 700; text-align: right; }
-
-    .preview {
-      min-height: 420px;
-      display: grid;
-      place-items: center;
-      overflow: hidden;
-    }
-
-    .preview iframe,
-    .preview img {
+    table.sheet-grid {
       width: 100%;
-      height: 520px;
-      border: 0;
-      object-fit: contain;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    table.sheet-grid th {
       background: #f1f5f9;
-    }
-
-    .fields {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .verification,
-    .issues,
-    .mapping-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .hidden { display: none; }
-
-    .health-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 10px;
-    }
-
-    .health-item {
+      color: #334155;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 10px 12px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      white-space: nowrap;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    table.sheet-grid th.sticky-col {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: #e2e8f0;
+      text-align: center;
+      width: 48px;
+    }
+
+    table.sheet-grid td {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      white-space: nowrap;
+      color: var(--text);
+      position: relative;
+    }
+
+    table.sheet-grid td.sticky-col {
+      position: sticky;
+      left: 0;
       background: #f8fafc;
-      padding: 12px;
+      z-index: 1;
+      text-align: center;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    table.sheet-grid tr:hover td {
+      background-color: #f8fafc;
+    }
+
+    table.sheet-grid tr:hover td.sticky-col {
+      background-color: #f1f5f9;
+    }
+
+    table.sheet-grid tr.highlight-duplicate td {
+      background-color: #fffbeb !important;
+    }
+
+    /* Editable Cell */
+    .cell-view {
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: text;
+    }
+
+    .cell-view.edited {
+      color: #0369a1;
+      font-weight: 600;
+    }
+
+    .cell-input {
+      width: 100%;
+      min-height: 28px;
+      padding: 4px 6px;
+      font: inherit;
+      border: 2px solid var(--focus);
+      border-radius: 4px;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    /* Action Bar (Sticky Bottom) */
+    .action-bar {
+      position: sticky;
+      bottom: 16px;
+      z-index: 50;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
       display: flex;
       justify-content: space-between;
-      gap: 12px;
       align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+      flex-wrap: wrap;
     }
 
-    .health-item span:first-child {
+    .unsaved-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--warn);
+      margin-right: 6px;
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(2px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 14px;
+      padding: 24px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal-large {
+      max-width: 900px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-large .modal-body {
+      overflow: auto;
+      flex: 1;
+      margin: 16px 0;
+    }
+
+    .modal h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    /* Past Work Table */
+    table.past-work-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    table.past-work-table th,
+    table.past-work-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+    }
+
+    table.past-work-table th {
+      background: #f8fafc;
       color: var(--muted);
-      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Collapsible */
+    details.info-accordion {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 14px;
+    }
+
+    details.info-accordion summary {
+      font-weight: 700;
+      color: #334155;
+      cursor: pointer;
+      user-select: none;
     }
 
     @media (max-width: 980px) {
       .layout { grid-template-columns: 1fr; }
-      aside {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-      }
-      .workspace,
-      .review-grid,
-      .fields {
-        grid-template-columns: 1fr;
-      }
-      .user { text-align: left; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .workspace-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="layout">
+    <!-- Simplified Primary Sidebar (Only Accounting AI & Past Work visible) -->
     <aside>
       <img class="brand" src="https://www.nobrokerhood.com/assets/images/logo.png" alt="NoBrokerHood">
       <nav aria-label="Primary">
-        <a href="accounting.html?v=light-ui" class="active">Accounting AI</a>
+        <button type="button" class="active" id="navAccountingBtn" onclick="showView('accounting')">Accounting AI</button>
+        <button type="button" id="navPastWorkBtn" onclick="showView('past-work')">Past Work</button>
+        <!-- Background/hidden links preserved -->
         <a href="#config-health" id="adminHealthLink" class="hidden" onclick="showConfigHealth(event)">Configuration Health</a>
-        <a href="ocr.html?v=light-ui">Legacy Converter</a>
-        <a href="voice.html?v=light-ui">Voice Tool</a>
+        <a href="ocr.html?v=light-ui" class="hidden" id="legacyLink">Legacy Converter</a>
+        <a href="voice.html?v=light-ui" class="hidden" id="voiceLink">Voice Tool</a>
       </nav>
       <button class="logout" type="button" onclick="logout()">Logout</button>
     </aside>
 
     <main>
+      <!-- Topbar -->
       <div class="topbar">
-        <h1>Accounting AI</h1>
-        <div class="user" id="user"></div>
+        <h1 id="viewTitle">Accounting AI</h1>
+        <div class="user-tag" id="userTag">Loading...</div>
       </div>
 
-      <div class="workspace">
-        <section>
+      <!-- VIEW 1: ACCOUNTING AI (New Processing & Review Workspace) -->
+      <div id="viewAccounting">
+        <!-- New Processing Job Section -->
+        <section id="sectionUpload">
           <h2>New Processing Job</h2>
+          <div class="workspace-grid">
+            <div>
+              <div class="field">
+                <label for="purpose">Purpose</label>
+                <select id="purpose"></select>
+              </div>
 
-          <div class="field">
-            <label for="purpose">Purpose</label>
-            <select id="purpose"></select>
-          </div>
+              <div class="field">
+                <label for="template">Template</label>
+                <input id="template" type="text" readonly>
+              </div>
 
-          <div class="field">
-            <label for="template">Template</label>
-            <input id="template" type="text" readonly>
-          </div>
+              <div class="field">
+                <label for="destination">Destination</label>
+                <input id="destination" type="text" readonly>
+              </div>
 
-          <div class="field">
-            <label for="destination">Destination</label>
-            <input id="destination" type="text" readonly>
-          </div>
+              <div class="field">
+                <label for="file">Document File</label>
+                <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png">
+              </div>
 
-          <div class="field">
-            <label for="file">File</label>
-            <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" onchange="showPreview()">
-          </div>
+              <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="secondary" type="button" onclick="validateSelection()">Check Config</button>
+                <button class="primary" id="startBtn" type="button" onclick="startProcessing()">Start Processing</button>
+              </div>
+              <div id="status" class="status" style="margin-top: 12px; font-weight: 600;" role="status"></div>
+            </div>
 
-          <div class="actions">
-            <button class="secondary" type="button" onclick="validateSelection()">Validate Configuration</button>
-            <button class="primary" id="startBtn" type="button" onclick="startProcessing()">Start Processing</button>
-          </div>
-          <div id="status" class="status" role="status" aria-live="polite"></div>
-        </section>
-
-        <section>
-          <h2>Agent Progress</h2>
-          <ul class="progress" id="progress"></ul>
-          <div class="summary" style="margin-top: 16px;">
-            <div><span>Job ID</span><span id="summary-job">-</span></div>
-            <div><span>Purpose</span><span id="summary-purpose">-</span></div>
-            <div><span>Template Code</span><span id="summary-template">-</span></div>
-            <div><span>Overall Status</span><span id="summary-status">-</span></div>
+            <div>
+              <label>Processing Progress</label>
+              <ul class="progress-list" id="progressList"></ul>
+            </div>
           </div>
         </section>
-      </div>
 
-      <div class="review-grid hidden" id="reviewGrid">
-        <section>
-          <h2>Original Source</h2>
-          <div class="preview" id="preview">Select a PDF or image.</div>
-        </section>
-
-        <section>
-          <div class="topbar">
-            <h2>Human Review</h2>
-            <span class="badge warn" id="humanStatus">Waiting</span>
+        <!-- HUMAN REVIEW WORKSPACE (Centerpiece) -->
+        <div id="sectionReview" class="hidden">
+          <!-- Document Header Card -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h2 style="margin: 0 0 4px; font-size: 22px;">Review Extracted Transactions</h2>
+              <div style="color: var(--muted); font-size: 13px;" id="reviewDocSubtitle">Document Name | 0 transactions</div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span class="badge warn" id="reviewStatusBadge">Ready to Approve</span>
+              <button class="secondary" type="button" onclick="openSourcePreviewModal()">View Original Document</button>
+            </div>
           </div>
 
-          <div class="field">
-            <label>Extracted Fields</label>
-            <div class="fields" id="fields"></div>
+          <!-- Summary Stat Cards -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="label">Total Transactions</span>
+              <span class="value" id="statTotalTx">0</span>
+            </div>
+            <div class="stat-card attention" id="statCardAttention">
+              <span class="label">Items Need Attention</span>
+              <span class="value" id="statAttention">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="label">Bill Heads Identified</span>
+              <span class="value" id="statBillHeads">0</span>
+            </div>
+            <div class="stat-card unsaved">
+              <span class="label">Unsaved Changes</span>
+              <span class="value" id="statUnsaved">0</span>
+            </div>
           </div>
 
-          <div class="field">
-            <label>AI Verification</label>
-            <div class="verification" id="verification"></div>
+          <!-- Purpose Mismatch Warning Banner -->
+          <div class="alert-banner warn hidden" id="bannerPurposeMismatch">
+            <span style="font-size: 20px;">⚠</span>
+            <div style="flex: 1;">
+              <h4>Document type may not match your selected purpose</h4>
+              <p id="purposeMismatchText">Selected purpose differs from detected document type.</p>
+            </div>
+            <button class="secondary" style="font-size: 12px; min-height: 32px;" onclick="scrollToUpload()">Go Back & Change Purpose</button>
           </div>
 
-          <div class="field">
-            <label>Mappings</label>
-            <div class="mapping-list" id="mappings"></div>
+          <!-- Duplicate Reference & Validation Issues Banner -->
+          <div class="alert-banner warn hidden" id="bannerValidationIssues">
+            <span style="font-size: 20px;">⚠</span>
+            <div style="flex: 1;">
+              <h4>Items Need Attention</h4>
+              <div id="validationIssuesList" style="margin-top: 6px; display: grid; gap: 6px;"></div>
+            </div>
           </div>
 
-          <div class="field">
-            <label>Validation Issues</label>
-            <div class="issues" id="issues"></div>
+          <!-- Accounting Reconciliation Check Card -->
+          <div class="alert-banner info hidden" id="cardReconciliation">
+            <span style="font-size: 20px;">⚖</span>
+            <div style="flex: 1;">
+              <h4>Accounting Reconciliation Check</h4>
+              <div id="reconDetails" style="font-size: 13px; line-height: 1.6; margin-top: 4px;"></div>
+            </div>
           </div>
 
-          <div class="review-actions">
-            <button class="secondary" type="button" onclick="saveCorrections()">Save Edits</button>
-            <button class="secondary" type="button" onclick="saveMappings()">Confirm Mappings</button>
-            <button class="danger" type="button" onclick="rejectJob()">Reject</button>
-            <button class="primary" type="button" onclick="approveJob()">Approve & Generate Excel</button>
-          </div>
-          <div class="status" id="reviewStatus" role="status" aria-live="polite"></div>
-          <div id="downloadWrap" class="hidden" style="margin-top: 12px;">
-            <button class="primary" type="button" onclick="downloadExcel()">Download Excel</button>
-          </div>
-        </section>
-      </div>
+          <!-- Bill Head Mapping Card -->
+          <section id="cardMapping">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h3 style="margin: 0; font-size: 16px;">Bill Head Mapping</h3>
+              <span class="badge ok" id="mappingStatusBadge">All mappings confirmed</span>
+            </div>
+            <div id="mappingList" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px;"></div>
+            <div id="mappingConfirmWrap" class="hidden" style="margin-top: 14px;">
+              <button class="primary" style="font-size: 13px;" onclick="saveMappings()">Confirm Mappings</button>
+            </div>
+          </section>
 
-      <section id="configHealth" class="hidden" style="margin-top: 16px;">
-        <div class="topbar">
-          <h2>Configuration Health</h2>
-          <button class="secondary" type="button" onclick="loadConfigHealth()">Refresh</button>
+          <!-- SPREADSHEET GRID (The Centerpiece) -->
+          <div class="grid-container">
+            <div class="grid-toolbar">
+              <div class="search-box">
+                <span class="icon">🔍</span>
+                <input type="text" id="gridSearch" placeholder="Search transactions (flat, amount, bill head, ref)..." oninput="filterAndRenderGrid()">
+              </div>
+              <div class="filter-group">
+                <button class="filter-btn active" id="filterAll" onclick="setFilter('all')">All (<span id="countAll">0</span>)</button>
+                <button class="filter-btn" id="filterAttention" onclick="setFilter('attention')">Needs Attention (<span id="countAttention">0</span>)</button>
+                <button class="filter-btn" id="filterVerified" onclick="setFilter('verified')">Verified (<span id="countVerified">0</span>)</button>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="secondary" style="min-height: 34px; font-size: 13px;" onclick="toggleColumnVisibilityMenu()">Columns ▾</button>
+                <button class="secondary" style="min-height: 34px; font-size: 13px; color: var(--primary);" onclick="addNewRow()">+ Add Transaction</button>
+              </div>
+            </div>
+
+            <!-- Column Visibility Dropdown Menu -->
+            <div id="columnMenu" class="hidden" style="padding: 12px; background: white; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px;"></div>
+
+            <!-- Scrollable Table -->
+            <div class="table-scroll">
+              <table class="sheet-grid" id="sheetGrid">
+                <thead>
+                  <tr id="gridHeaderRow"></tr>
+                </thead>
+                <tbody id="gridBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Non-Transaction Document Balances & Notes -->
+          <details class="info-accordion" id="detailsDocNotes">
+            <summary>Document Balances & Non-Transaction Notes</summary>
+            <div id="docNotesContent" style="margin-top: 10px; font-size: 13px; line-height: 1.6; color: #475569;"></div>
+          </details>
+
+          <!-- Collapsible How to Review -->
+          <details class="info-accordion">
+            <summary>How to Review</summary>
+            <ol style="margin: 10px 0 0 18px; padding: 0; line-height: 1.7; font-size: 13px;">
+              <li>Check rows marked with <strong>⚠</strong>.</li>
+              <li>Click or double-click any cell to directly edit values.</li>
+              <li>Compare uncertain entries with the source document using <strong>View Original Document</strong>.</li>
+              <li>Add missing transactions or delete invalid rows if necessary.</li>
+              <li>Confirm Bill Head mappings (optional).</li>
+              <li>Click <strong>Save Changes</strong> to persist your edits.</li>
+              <li>Approve and generate the exact 12-column NoBrokerHood Excel sheet.</li>
+            </ol>
+          </details>
+
+          <!-- Collapsible Technical Details (Hidden by default) -->
+          <details class="info-accordion">
+            <summary>Technical Details ▾</summary>
+            <div id="technicalDetailsContent" style="margin-top: 10px; font-family: monospace; font-size: 12px; background: #1e293b; color: #f8fafc; padding: 14px; border-radius: 6px; overflow: auto; max-height: 250px;"></div>
+          </details>
+
+          <!-- Sticky Action Bar -->
+          <div class="action-bar">
+            <div style="display: flex; align-items: center; font-weight: 600;">
+              <span id="unsavedIndicator" class="hidden"><span class="unsaved-dot"></span><span id="unsavedText">0 unsaved changes</span></span>
+              <span id="savedIndicator" style="color: var(--ok); font-size: 13px;">✓ All changes saved</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button class="danger" type="button" onclick="openRejectModal()">Reject Document</button>
+              <button class="secondary" id="saveBtn" type="button" onclick="saveEdits()">Save Changes</button>
+              <button class="primary" id="approveBtn" type="button" onclick="openApproveModal()">✓ Approve & Generate Excel</button>
+            </div>
+          </div>
         </div>
-        <div class="health-grid" id="healthGrid"></div>
-        <div class="status" id="healthStatus" role="status" aria-live="polite"></div>
-      </section>
+      </div>
+
+      <!-- VIEW 2: PAST WORK (Real Job History) -->
+      <div id="viewPastWork" class="hidden">
+        <section>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+            <h2>Past Work History</h2>
+            <div class="search-box">
+              <span class="icon">🔍</span>
+              <input type="text" id="pastWorkSearch" placeholder="Search past documents..." oninput="filterPastWork()">
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="past-work-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Purpose</th>
+                  <th>Date</th>
+                  <th>Transactions</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pastWorkBody">
+                <tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">Loading previous jobs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 
+  <!-- MODAL: Delete Row Confirmation -->
+  <div id="modalDelete" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Delete Transaction</h3>
+      <p id="deleteModalPrompt">Are you sure you want to delete this transaction?</p>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('modalDelete')">Cancel</button>
+        <button class="danger" onclick="confirmDeleteRow()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Approve & Generate Excel Confirmation -->
+  <div id="modalApprove" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Ready to Generate NBH Excel?</h3>
+      <p id="approveModalDetails">29 transactions will be included across 12 NoBrokerHood columns.</p>
+      <div id="approveBlockingWarn" class="alert-banner warn hidden" style="margin: 12px 0;">
+        <div>Please resolve remaining issues before approval.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('modalApprove')">Cancel</button>
+        <button class="primary" id="confirmApproveBtn" onclick="confirmApprove()">Generate Excel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Reject Document -->
+  <div id="modalReject" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Reject Document</h3>
+      <p>Why are you rejecting this document?</p>
+      <div style="display: grid; gap: 8px; margin: 14px 0; font-size: 13px;">
+        <label><input type="radio" name="rejectReason" value="WRONG_TYPE" checked> Wrong document type</label>
+        <label><input type="radio" name="rejectReason" value="POOR_QUALITY"> Poor document quality / unreadable</label>
+        <label><input type="radio" name="rejectReason" value="INCORRECT_EXTRACTION"> Incorrect extraction</label>
+        <label><input type="radio" name="rejectReason" value="DUPLICATE"> Duplicate document</label>
+        <label><input type="radio" name="rejectReason" value="OTHER"> Other</label>
+      </div>
+      <div class="field">
+        <label for="rejectComments">Optional Comments</label>
+        <textarea id="rejectComments" placeholder="Add details..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('modalReject')">Cancel</button>
+        <button class="danger" onclick="confirmReject()">Reject</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Source Document Preview -->
+  <div id="modalPreview" class="modal-backdrop hidden">
+    <div class="modal modal-large">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 id="previewModalTitle">Original Source Document</h3>
+        <button class="secondary" style="min-height: 30px; padding: 0 8px;" onclick="closeModal('modalPreview')">✕ Close</button>
+      </div>
+      <div class="modal-body" id="previewModalBody">
+        <div style="display: grid; place-items: center; height: 500px; color: var(--muted);">Loading document preview...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT LOGIC -->
   <script>
-    const BASE_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-      ? "http://127.0.0.1:8030"
-      : "https://pdftoexcel-846x.onrender.com";
+    const BASE_URL = window.__API_BASE__ ||
+      ((location.hostname === "localhost" || location.hostname === "127.0.0.1")
+        ? "http://127.0.0.1:8030"
+        : "");
     const token = sessionStorage.getItem("accounting_session_token");
-    let currentJob = null;
-    let currentPreviewUrl = null;
 
     if (!token) {
       window.location.href = "index.html";
     }
+
+    // Exact 12 NBH Schema
+    const NBH_COLUMNS = [
+      "Payment Type*",
+      "Society Bank Name/Bank code(Given to you by nobrokerhood)*",
+      "Cheque/Ref No*",
+      "Tower No*",
+      "Flat No*",
+      "Bill Head*",
+      "Amount*",
+      "Transaction Date*",
+      "Comments",
+      "Meter No",
+      "Cheque Issuer Bank",
+      "Cheque Date"
+    ];
+
+    const COLUMN_SHORT_LABELS = {
+      "Payment Type*": "Payment Type*",
+      "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "Bank / Code*",
+      "Cheque/Ref No*": "Ref / Cheque No*",
+      "Tower No*": "Tower*",
+      "Flat No*": "Flat*",
+      "Bill Head*": "Bill Head*",
+      "Amount*": "Amount*",
+      "Transaction Date*": "Date*",
+      "Comments": "Comments",
+      "Meter No": "Meter No",
+      "Cheque Issuer Bank": "Issuer Bank",
+      "Cheque Date": "Cheque Date"
+    };
+
+    let currentJob = null;
+    let localRows = [];
+    let originalRowsJson = "[]";
+    let activeFilter = "all";
+    let columnVisibility = {};
+    let pendingDeleteIndex = null;
+    let pastJobs = [];
+    let localSourceFileBlob = null;
+    let localSourceFileUrl = null;
+
+    // Initialize Column Visibility
+    NBH_COLUMNS.forEach(c => columnVisibility[c] = true);
 
     function authHeaders(json = true) {
       const headers = { "Authorization": "Bearer " + token };
@@ -494,62 +1058,38 @@
       return res;
     }
 
-    function setStatus(message, ok = false) {
-      const status = document.getElementById("status");
-      status.textContent = message;
-      status.className = ok ? "status ok" : "status error";
+    function escapeHtml(val) {
+      return String(val ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[ch]);
+    }
+
+    function showView(view) {
+      document.getElementById("viewAccounting").classList.toggle("hidden", view !== "accounting");
+      document.getElementById("viewPastWork").classList.toggle("hidden", view !== "past-work");
+      document.getElementById("navAccountingBtn").classList.toggle("active", view === "accounting");
+      document.getElementById("navPastWorkBtn").classList.toggle("active", view === "past-work");
+      document.getElementById("viewTitle").textContent = view === "accounting" ? "Accounting AI" : "Past Work";
+      if (view === "past-work") loadPastWork();
     }
 
     async function boot() {
       const userRes = await api("/auth/me");
       if (!userRes.ok) return;
       const user = await userRes.json();
-      document.getElementById("user").textContent = `${user.name || user.email} | ${user.role}`;
-      document.getElementById("adminHealthLink").classList.toggle("hidden", user.role !== "ADMIN");
+      document.getElementById("userTag").textContent = `${user.name || user.email} | ${user.role}`;
 
       const purposeRes = await api("/config/purposes");
       const data = await purposeRes.json();
       const select = document.getElementById("purpose");
-      select.innerHTML = data.purposes.map((purpose) =>
-        `<option value="${purpose.code}">${purpose.label}</option>`
-      ).join("");
+      select.innerHTML = data.purposes.map(p => `<option value="${p.code}">${p.label}</option>`).join("");
       select.addEventListener("change", validateSelection);
       await validateSelection();
       renderProgress([]);
-    }
-
-    function showConfigHealth(event) {
-      event.preventDefault();
-      document.getElementById("configHealth").classList.remove("hidden");
-      loadConfigHealth();
-    }
-
-    function statusClass(status) {
-      if (status === "READY" || status === "CONFIGURED" || status === "PASS") return "ok";
-      if (status === "MISSING" || status === "NO_ACCESS" || status === "MISMATCH") return "bad";
-      return "warn";
-    }
-
-    function labelize(key) {
-      return key.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-    }
-
-    async function loadConfigHealth() {
-      const grid = document.getElementById("healthGrid");
-      const status = document.getElementById("healthStatus");
-      status.textContent = "Checking configuration...";
-      status.className = "status ok";
-      try {
-        const res = await api("/config/health");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Health check failed.");
-        grid.innerHTML = Object.entries(data.status).map(([key, value]) =>
-          `<div class="health-item"><span>${labelize(key)}</span><span class="badge ${statusClass(value)}">${value}</span></div>`
-        ).join("");
-        status.textContent = "Configuration health loaded.";
-      } catch (error) {
-        status.textContent = error.message;
-        status.className = "status error";
+      const urlParams = new URLSearchParams(window.location.search);
+      const initialJobId = urlParams.get("job_id") || sessionStorage.getItem("accounting_active_job_id");
+      if (initialJobId) {
+        await reopenJob(initialJobId);
       }
     }
 
@@ -565,8 +1105,6 @@
         if (!res.ok) throw new Error(data.detail || "Configuration missing.");
         document.getElementById("template").value = data.template.template_name;
         document.getElementById("destination").value = `${data.purpose} Incoming`;
-        document.getElementById("summary-purpose").textContent = data.purpose;
-        document.getElementById("summary-template").textContent = data.template.template_code;
         setStatus("Configuration verified.", true);
       } catch (error) {
         document.getElementById("template").value = "";
@@ -575,32 +1113,27 @@
       }
     }
 
-    function showPreview() {
-      const file = document.getElementById("file").files[0];
-      const preview = document.getElementById("preview");
-      if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
-      if (!file) {
-        preview.textContent = "Select a PDF or image.";
-        return;
-      }
-      currentPreviewUrl = URL.createObjectURL(file);
-      if (file.type === "application/pdf") {
-        preview.innerHTML = `<iframe title="Source PDF" src="${currentPreviewUrl}"></iframe>`;
-      } else {
-        preview.innerHTML = `<img alt="Source preview" src="${currentPreviewUrl}">`;
-      }
+    function setStatus(message, ok = false) {
+      const status = document.getElementById("status");
+      status.textContent = message;
+      status.style.color = ok ? "var(--primary-dark)" : "var(--danger)";
     }
 
     async function startProcessing() {
-      const file = document.getElementById("file").files[0];
+      const fileInput = document.getElementById("file");
+      const file = fileInput.files[0];
       const purpose = document.getElementById("purpose").value;
       if (!file) {
-        setStatus("Select a PDF or image first.");
+        setStatus("Please select a document file first.");
         return;
       }
+      localSourceFileBlob = file;
+      if (localSourceFileUrl) URL.revokeObjectURL(localSourceFileUrl);
+      localSourceFileUrl = URL.createObjectURL(file);
+
       const startBtn = document.getElementById("startBtn");
       startBtn.disabled = true;
-      setStatus("Creating job and running workflow...", true);
+      setStatus("Processing document with Accounting AI...", true);
 
       const form = new FormData();
       form.append("purpose", purpose);
@@ -614,130 +1147,476 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Processing failed.");
-        currentJob = data;
         renderJob(data);
-        document.getElementById("reviewGrid").classList.remove("hidden");
-        setStatus("Waiting for human review.", true);
-      } catch (error) {
-        setStatus(error.message);
+        setStatus("Document extracted and ready for human review.", true);
+      } catch (err) {
+        setStatus(err.message);
       } finally {
         startBtn.disabled = false;
       }
     }
 
+    const STAGE_LABELS = {
+      DONE: "COMPLETED",
+      PENDING: "PENDING",
+      FAILED: "FAILED",
+      NEEDS_ATTENTION: "NEEDS ATTENTION",
+      NOT_REACHED: "NOT REACHED"
+    };
+
     function renderProgress(items) {
-      const list = document.getElementById("progress");
+      const list = document.getElementById("progressList");
       const defaults = [
-        "File uploaded",
+        "Document uploaded",
         "Stored in Incoming",
-        "Extraction",
-        "AI Verification",
-        "Mapping",
+        "Information extracted",
+        "Information checked",
+        "NBH fields prepared",
         "Validation",
         "Human review",
-        "Excel generation"
+        "Generate Excel"
       ].map(label => ({ label, status: "PENDING" }));
-      list.innerHTML = (items.length ? items : defaults).map(item =>
-        `<li class="${item.status === "DONE" ? "done" : ""}">${item.label}</li>`
-      ).join("");
+
+      const displayItems = items.length ? items : defaults;
+      list.innerHTML = displayItems.map(item => {
+        let cls = "progress-item";
+        if (item.status === "DONE") cls += " done";
+        else if (item.status === "FAILED") cls += " failed";
+        else if (item.status === "NEEDS_ATTENTION") cls += " attention";
+        return `<li class="${cls}"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(STAGE_LABELS[item.status] || item.status)}</strong></li>`;
+      }).join("");
     }
 
     function renderJob(job) {
       currentJob = job;
-      document.getElementById("summary-job").textContent = job.job_id || "-";
-      document.getElementById("summary-purpose").textContent = job.purpose || "-";
-      document.getElementById("summary-template").textContent = job.template_code || "-";
-      document.getElementById("summary-status").textContent = job.overall_status || "-";
-      document.getElementById("humanStatus").textContent = job.human_status || "-";
-      document.getElementById("humanStatus").className = job.overall_status === "COMPLETED" ? "badge ok" : "badge warn";
+      document.getElementById("sectionReview").classList.remove("hidden");
+      document.getElementById("reviewDocSubtitle").textContent = `${job.source_filename || "Document"} | Job ID: ${job.job_id}`;
+
+      // Extract rows
+      const targetData = job.mapping_result?.mapped_data || job.extracted_data || {};
+      const rawRows = targetData.rows || [];
+      localRows = rawRows.map((r, i) => {
+        const normalized = { _internal_id: "row_" + i + "_" + Math.random().toString(36).substr(2, 6) };
+        NBH_COLUMNS.forEach(col => {
+          normalized[col] = (r[col] === undefined || r[col] === null || String(r[col]).trim() === "") ? "-" : String(r[col]).trim();
+        });
+        return normalized;
+      });
+      originalRowsJson = JSON.stringify(localRows);
+
       renderProgress(job.progress || []);
-      renderFields(job.mapping_result?.mapped_data || job.extracted_data || {});
-      renderVerification(job.verification_result || {});
-      renderMappings(job.mapping_result || {});
-      renderIssues(job.validation_result || {});
-      document.getElementById("downloadWrap").classList.toggle("hidden", job.overall_status !== "COMPLETED");
+      renderSummaryCards(job);
+      renderPurposeMismatchBanner(job);
+      renderValidationIssues(job);
+      renderReconciliationCard(targetData);
+      renderMappingCard(job.mapping_result || {});
+      renderDocumentNotes(targetData);
+      renderTechnicalDetails(job);
+      renderColumnMenu();
+      filterAndRenderGrid();
+      updateUnsavedCounter();
     }
 
-    function renderFields(data) {
-      const fields = document.getElementById("fields");
-      fields.innerHTML = Object.entries(data).map(([key, value]) => {
-        const display = typeof value === "object" && value !== null ? JSON.stringify(value, null, 2) : (value ?? "");
-        const input = typeof value === "object" && value !== null
-          ? `<textarea data-field="${key}">${display}</textarea>`
-          : `<input type="text" data-field="${key}" value="${String(display).replace(/"/g, "&quot;")}">`;
-        return `<div><label>${key}</label>${input}</div>`;
+    function renderSummaryCards(job) {
+      const total = localRows.length;
+      document.getElementById("statTotalTx").textContent = total;
+
+      const issues = (job.validation_result?.issues || []).length;
+      const verifBad = ((job.verification_result?.fields || []).filter(f => f.status === "MISMATCH" || f.status === "UNCERTAIN")).length;
+      const needAttention = issues + verifBad;
+      document.getElementById("statAttention").textContent = needAttention;
+
+      const billHeads = new Set(localRows.map(r => r["Bill Head*"]).filter(b => b && b !== "-")).size;
+      document.getElementById("statBillHeads").textContent = billHeads;
+
+      const badge = document.getElementById("reviewStatusBadge");
+      if (job.overall_status === "COMPLETED") {
+        badge.textContent = "Completed";
+        badge.className = "badge ok";
+      } else if (job.overall_status === "FAILED") {
+        badge.textContent = "Failed";
+        badge.className = "badge bad";
+      } else if (needAttention > 0) {
+        badge.textContent = "Needs Attention";
+        badge.className = "badge warn";
+      } else {
+        badge.textContent = "Ready to Approve";
+        badge.className = "badge ok";
+      }
+    }
+
+    function renderPurposeMismatchBanner(job) {
+      const banner = document.getElementById("bannerPurposeMismatch");
+      const targetData = job.mapping_result?.mapped_data || job.extracted_data || {};
+      const docType = targetData.document_type;
+      const purpose = job.purpose;
+      if (docType && ((docType === "PETTY_CASH_REGISTER" && purpose === "MEMBER_RECEIPT") || (docType === "BANK_STATEMENT" && purpose !== "BANK_STATEMENT"))) {
+        banner.classList.remove("hidden");
+        document.getElementById("purposeMismatchText").innerHTML = `Selected purpose: <strong>${escapeHtml(purpose)}</strong> | Detected document: <strong>${escapeHtml(docType)}</strong>. Please confirm that you selected the correct processing type.`;
+      } else {
+        banner.classList.add("hidden");
+      }
+    }
+
+    function renderValidationIssues(job) {
+      const banner = document.getElementById("bannerValidationIssues");
+      const list = document.getElementById("validationIssuesList");
+      const issues = job.validation_result?.issues || [];
+      if (!issues.length) {
+        banner.classList.add("hidden");
+        list.innerHTML = "";
+        return;
+      }
+      banner.classList.remove("hidden");
+      list.innerHTML = issues.map((iss, i) => {
+        let actionBtn = "";
+        if (iss.code === "DUPLICATE_REFERENCE" || iss.field === "Cheque/Ref No*") {
+          actionBtn = `<button class="secondary" style="font-size: 11px; min-height: 26px; padding: 0 8px; margin-left: 8px;" onclick="highlightDuplicateRows('${escapeHtml(iss.current_value || '')}')">Review Rows</button>`;
+        }
+        return `<div style="display: flex; align-items: center; justify-content: space-between;"><span>• ${escapeHtml(iss.message || iss.field)}</span>${actionBtn}</div>`;
       }).join("");
     }
 
-    function renderVerification(result) {
-      const wrap = document.getElementById("verification");
-      const rows = result.fields || [];
-      if (!rows.length) {
-        wrap.innerHTML = `<span class="badge ok">${result.overall_status || "PENDING"}</span>`;
+    function highlightDuplicateRows(refVal) {
+      if (!refVal) {
+        document.getElementById("gridSearch").value = "270";
+      } else {
+        document.getElementById("gridSearch").value = refVal;
+      }
+      filterAndRenderGrid();
+      document.getElementById("sheetGrid").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function renderReconciliationCard(data) {
+      const card = document.getElementById("cardReconciliation");
+      const recon = data.reconciliation;
+      if (!recon || recon.overall_status === "UNCHECKED") {
+        card.classList.add("hidden");
         return;
       }
-      wrap.innerHTML = rows.map(row =>
-        `<div class="badge ${row.status === "VERIFIED" ? "ok" : "bad"}">${row.field}: ${row.status} | extracted ${row.extracted_value ?? ""} | verified ${row.verified_value ?? ""}</div>`
-      ).join("");
+      card.classList.remove("hidden");
+      const details = document.getElementById("reconDetails");
+      let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">`;
+      html += `<div><strong>Transaction Sum (Calculated):</strong> ₹${recon.calculated_transaction_total?.toLocaleString?.('en-IN') || recon.calculated_transaction_total}</div>`;
+      if (recon.source_total_expenditure && recon.source_total_expenditure !== "-") {
+        html += `<div><strong>Source Total Expenditure:</strong> ₹${recon.source_total_expenditure}</div>`;
+      }
+      if (recon.source_opening_balance && recon.source_opening_balance !== "-") {
+        html += `<div><strong>Source Opening / C/F Value:</strong> ₹${escapeHtml(recon.source_opening_balance)}</div>`;
+      }
+      if (recon.derived_opening_adjustment !== null && recon.derived_opening_adjustment !== undefined) {
+        html += `<div><strong>Derived Opening Adjustment:</strong> ₹${recon.derived_opening_adjustment}</div>`;
+      }
+      if (recon.opening_balance_difference !== null && recon.opening_balance_difference !== undefined && Math.abs(recon.opening_balance_difference) > 0) {
+        html += `<div><strong>Opening Balance Difference:</strong> ₹${recon.opening_balance_difference}</div>`;
+      }
+      if (recon.calculated_inflow_total && recon.calculated_inflow_total !== "-") {
+        html += `<div><strong>Calculated Inflows:</strong> ₹${recon.calculated_inflow_total?.toLocaleString?.('en-IN') || recon.calculated_inflow_total}</div>`;
+      }
+      if (recon.source_total_receipts && recon.source_total_receipts !== "-") {
+        html += `<div><strong>Source Total Receipts:</strong> ₹${recon.source_total_receipts}</div>`;
+      }
+      if (recon.source_closing_balance && recon.source_closing_balance !== "-") {
+        html += `<div><strong>Source Closing Balance:</strong> ₹${recon.source_closing_balance}</div>`;
+      }
+      if (recon.calculated_net_balance && recon.calculated_net_balance !== "-") {
+        html += `<div><strong>Calculated Closing Balance:</strong> ₹${recon.calculated_net_balance}</div>`;
+      }
+      if (recon.closing_balance_difference !== null && Math.abs(recon.closing_balance_difference) > 0) {
+        html += `<div style="color: var(--warn); font-weight: bold; grid-column: 1 / -1;">⚠ Balance Discrepancy: Difference of ₹${recon.closing_balance_difference} between Source (₹${recon.source_closing_balance}) and Calculated (₹${recon.calculated_net_balance}) [Status: DISCREPANCY]</div>`;
+      }
+      html += `</div>`;
+      details.innerHTML = html;
     }
 
-    function renderMappings(result) {
-      const wrap = document.getElementById("mappings");
-      const missing = result.missing || [];
-      if (!missing.length) {
-        wrap.innerHTML = `<span class="badge ok">${result.status || "PENDING"}</span>`;
+    function renderMappingCard(mapping) {
+      const list = document.getElementById("mappingList");
+      const badge = document.getElementById("mappingStatusBadge");
+      const confirmWrap = document.getElementById("mappingConfirmWrap");
+      const missing = mapping.missing || [];
+
+      // Collect unique bill heads from rows
+      const billHeads = Array.from(new Set(localRows.map(r => r["Bill Head*"]).filter(b => b && b !== "-")));
+      if (!billHeads.length) {
+        list.innerHTML = `<div style="color: var(--muted); font-size: 13px;">No Bill Heads found in document.</div>`;
         return;
       }
-      wrap.innerHTML = missing.map((item, index) =>
-        `<div>
-          <label>${item.type}: ${item.source_value}</label>
-          <input type="text" data-map-index="${index}" data-map-type="${item.type}" data-map-source="${item.source_value}" placeholder="Enter approved code">
-        </div>`
-      ).join("");
-    }
 
-    function renderIssues(result) {
-      const wrap = document.getElementById("issues");
-      const issues = result.issues || [];
-      if (!issues.length) {
-        wrap.innerHTML = `<span class="badge ok">${result.status || "PENDING"}</span>`;
-        return;
+      if (missing.length > 0) {
+        badge.textContent = `${missing.length} Unmapped (Optional)`;
+        badge.className = "badge warn";
+        confirmWrap.classList.remove("hidden");
+      } else {
+        badge.textContent = "All mappings confirmed";
+        badge.className = "badge ok";
+        confirmWrap.classList.add("hidden");
       }
-      wrap.innerHTML = issues.map(issue =>
-        `<div class="badge bad">${issue.field}: ${issue.message}</div>`
-      ).join("");
-    }
 
-    async function refreshJob() {
-      if (!currentJob) return;
-      const res = await api(`/processing/jobs/${currentJob.job_id}`);
-      const data = await res.json();
-      if (res.ok) renderJob(data);
-    }
-
-    async function saveCorrections() {
-      if (!currentJob) return;
-      const corrections = {};
-      document.querySelectorAll("[data-field]").forEach(input => {
-        const key = input.getAttribute("data-field");
-        const original = (currentJob.mapping_result?.mapped_data || currentJob.extracted_data || {})[key];
-        let value = input.value;
-        if (typeof original === "object" && original !== null) {
-          try { value = JSON.parse(value); } catch (error) {}
+      list.innerHTML = billHeads.map(bh => {
+        const isMissing = missing.some(m => m.source_value === bh);
+        if (isMissing) {
+          return `<div style="padding: 8px 12px; border: 1px solid #fde68a; border-radius: 6px; background: var(--warn-bg);">
+            <div style="font-weight: 700; color: #b45309;">⚠ ${escapeHtml(bh)}</div>
+            <input type="text" data-map-type="BILL_HEAD" data-map-source="${escapeHtml(bh)}" placeholder="Enter NBH Bill Head code" style="min-height: 32px; font-size: 12px; margin-top: 4px;">
+          </div>`;
         }
-        if (JSON.stringify(original ?? "") !== JSON.stringify(value ?? "")) {
-          corrections[key] = value;
+        return `<div style="padding: 8px 12px; border: 1px solid #bbf7d0; border-radius: 6px; background: var(--ok-bg); color: #15803d; font-weight: 600;">✓ ${escapeHtml(bh)}</div>`;
+      }).join("");
+    }
+
+    function renderDocumentNotes(data) {
+      const wrap = document.getElementById("docNotesContent");
+      const summary = data.balance_summary || {};
+      const notes = summary.notes || [];
+      const inflows = summary.inflows || [];
+
+      let html = "";
+      if (inflows.length > 0) {
+        html += `<strong>Cash Inflows / Withdrawals:</strong><ul style="margin: 4px 0 10px 18px;">`;
+        inflows.forEach(inf => {
+          html += `<li>${escapeHtml(inf.date || "")} ${escapeHtml(inf.description || "")} — Amount: <strong>₹${escapeHtml(inf.amount || "")}</strong> (Ref: ${escapeHtml(inf.ref_no || "-")})</li>`;
+        });
+        html += `</ul>`;
+      }
+      if (notes.length > 0) {
+        html += `<strong>Handwritten Notes / Summary:</strong><ul style="margin: 4px 0 0 18px;">`;
+        notes.forEach(n => html += `<li>${escapeHtml(n)}</li>`);
+        html += `</ul>`;
+      }
+      if (!html) html = "No non-transaction notes recorded.";
+      wrap.innerHTML = html;
+    }
+
+    function renderTechnicalDetails(job) {
+      document.getElementById("technicalDetailsContent").textContent = JSON.stringify(job, null, 2);
+    }
+
+    function renderColumnMenu() {
+      const menu = document.getElementById("columnMenu");
+      menu.innerHTML = NBH_COLUMNS.map(col => `
+        <label style="display: inline-flex; align-items: center; gap: 4px; font-weight: normal; cursor: pointer;">
+          <input type="checkbox" ${columnVisibility[col] ? "checked" : ""} onchange="toggleColumn('${escapeHtml(col)}')">
+          ${escapeHtml(COLUMN_SHORT_LABELS[col] || col)}
+        </label>
+      `).join("");
+    }
+
+    function toggleColumnVisibilityMenu() {
+      document.getElementById("columnMenu").classList.toggle("hidden");
+    }
+
+    function toggleColumn(col) {
+      columnVisibility[col] = !columnVisibility[col];
+      renderColumnMenu();
+      filterAndRenderGrid();
+    }
+
+    function setFilter(filter) {
+      activeFilter = filter;
+      document.getElementById("filterAll").classList.toggle("active", filter === "all");
+      document.getElementById("filterAttention").classList.toggle("active", filter === "attention");
+      document.getElementById("filterVerified").classList.toggle("active", filter === "verified");
+      filterAndRenderGrid();
+    }
+
+    function filterAndRenderGrid() {
+      const query = (document.getElementById("gridSearch").value || "").toLowerCase().trim();
+      const headerRow = document.getElementById("gridHeaderRow");
+      const tbody = document.getElementById("gridBody");
+
+      // Render Header
+      let headHtml = `<th class="sticky-col">#</th><th>Status</th>`;
+      NBH_COLUMNS.forEach(col => {
+        if (columnVisibility[col]) {
+          headHtml += `<th onclick="sortGridBy('${escapeHtml(col)}')">${escapeHtml(COLUMN_SHORT_LABELS[col] || col)} ⇅</th>`;
         }
       });
-      const res = await api(`/processing/jobs/${currentJob.job_id}/corrections`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ corrections })
+      headHtml += `<th style="text-align: center;">Actions</th>`;
+      headerRow.innerHTML = headHtml;
+
+      // Filter rows
+      let visible = localRows.filter((r, idx) => {
+        // Status filter
+        const hasWarning = (r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn);
+        if (activeFilter === "attention" && !hasWarning) return false;
+        if (activeFilter === "verified" && hasWarning) return false;
+
+        // Search query
+        if (query) {
+          const match = Object.values(r).some(val => String(val).toLowerCase().includes(query));
+          if (!match) return false;
+        }
+        return true;
       });
-      const data = await res.json();
-      if (res.ok) {
+
+      // Update filter counts
+      document.getElementById("countAll").textContent = localRows.length;
+      document.getElementById("countAttention").textContent = localRows.filter(r => r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn).length;
+      document.getElementById("countVerified").textContent = localRows.length - parseInt(document.getElementById("countAttention").textContent);
+
+      if (!visible.length) {
+        tbody.innerHTML = `<tr><td colspan="${NBH_COLUMNS.length + 3}" style="text-align: center; color: var(--muted); padding: 32px;">No matching transactions found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = visible.map((row, visualIdx) => {
+        const actualIdx = localRows.findIndex(r => r._internal_id === row._internal_id);
+        const hasWarn = (row["Amount*"] === "-" || row["Cheque/Ref No*"] === "-" || row._has_warn);
+        const statusBadge = hasWarn ? `<span class="badge warn" title="Needs attention">⚠</span>` : `<span class="badge ok" title="Verified">✓</span>`;
+
+        let tr = `<tr><td class="sticky-col">${actualIdx + 1}</td><td style="text-align: center;">${statusBadge}</td>`;
+
+        NBH_COLUMNS.forEach(col => {
+          if (columnVisibility[col]) {
+            const val = row[col] ?? "-";
+            const isEdited = row["_edited_" + col];
+            tr += `<td onclick="startInlineEdit(event, '${row._internal_id}', '${escapeHtml(col)}')">
+              <div class="cell-view ${isEdited ? 'edited' : ''}">
+                <span>${escapeHtml(val)}</span>
+              </div>
+            </td>`;
+          }
+        });
+
+        tr += `<td style="text-align: center; white-space: nowrap;">
+          <button class="secondary" style="min-height: 26px; padding: 0 8px; font-size: 11px;" onclick="duplicateRow('${row._internal_id}')" title="Duplicate row">Duplicate</button>
+          <button class="danger" style="min-height: 26px; padding: 0 8px; font-size: 11px; margin-left: 4px;" onclick="openDeleteModal(${actualIdx})" title="Delete row">Delete</button>
+        </td></tr>`;
+        return tr;
+      }).join("");
+    }
+
+    function startInlineEdit(e, rowId, col) {
+      const td = e.currentTarget;
+      if (td.querySelector("input")) return; // already editing
+
+      const row = localRows.find(r => r._internal_id === rowId);
+      if (!row) return;
+
+      const currentVal = row[col] === "-" ? "" : row[col];
+      td.innerHTML = `<input type="text" class="cell-input" value="${escapeHtml(currentVal)}">`;
+      const input = td.querySelector("input");
+      input.focus();
+      input.select();
+
+      function commit() {
+        const newVal = input.value.trim() || "-";
+        if (newVal !== row[col]) {
+          row[col] = newVal;
+          row["_edited_" + col] = true;
+          updateUnsavedCounter();
+        }
+        filterAndRenderGrid();
+      }
+
+      input.addEventListener("keydown", ev => {
+        if (ev.key === "Enter") {
+          commit();
+        } else if (ev.key === "Escape") {
+          filterAndRenderGrid();
+        } else if (ev.key === "Tab") {
+          ev.preventDefault();
+          commit();
+        }
+      });
+      input.addEventListener("blur", commit);
+    }
+
+    function addNewRow() {
+      const newId = "row_" + localRows.length + "_" + Math.random().toString(36).substr(2, 6);
+      const newRow = { _internal_id: newId, _is_new: true };
+      NBH_COLUMNS.forEach(c => newRow[c] = "-");
+      localRows.push(newRow);
+      updateUnsavedCounter();
+      filterAndRenderGrid();
+      document.getElementById("sheetGrid").scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+
+    function duplicateRow(rowId) {
+      const source = localRows.find(r => r._internal_id === rowId);
+      if (!source) return;
+      const clone = { ...source };
+      clone._internal_id = "row_" + localRows.length + "_" + Math.random().toString(36).substr(2, 6);
+      clone._is_new = true;
+      localRows.push(clone);
+      updateUnsavedCounter();
+      filterAndRenderGrid();
+    }
+
+    function openDeleteModal(idx) {
+      pendingDeleteIndex = idx;
+      document.getElementById("deleteModalPrompt").textContent = `Are you sure you want to delete transaction #${idx + 1}?`;
+      openModal("modalDelete");
+    }
+
+    function confirmDeleteRow() {
+      if (pendingDeleteIndex !== null && pendingDeleteIndex >= 0 && pendingDeleteIndex < localRows.length) {
+        localRows.splice(pendingDeleteIndex, 1);
+        pendingDeleteIndex = null;
+        closeModal("modalDelete");
+        updateUnsavedCounter();
+        filterAndRenderGrid();
+      }
+    }
+
+    let sortCol = null;
+    let sortAsc = true;
+    function sortGridBy(col) {
+      if (sortCol === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortCol = col;
+        sortAsc = true;
+      }
+      localRows.sort((a, b) => {
+        const valA = a[col] ?? "";
+        const valB = b[col] ?? "";
+        const numA = parseFloat(valA.replace(/,/g, ""));
+        const numB = parseFloat(valB.replace(/,/g, ""));
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortAsc ? numA - numB : numB - numA;
+        }
+        return sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+      });
+      filterAndRenderGrid();
+    }
+
+    function updateUnsavedCounter() {
+      const currentJson = JSON.stringify(localRows);
+      const isUnsaved = currentJson !== originalRowsJson;
+      document.getElementById("unsavedIndicator").classList.toggle("hidden", !isUnsaved);
+      document.getElementById("savedIndicator").classList.toggle("hidden", isUnsaved);
+      document.getElementById("statUnsaved").textContent = isUnsaved ? "Yes" : "0";
+    }
+
+    async function saveEdits() {
+      if (!currentJob) return;
+      const saveBtn = document.getElementById("saveBtn");
+      saveBtn.disabled = true;
+
+      // Clean rows for persistence
+      const cleanRows = localRows.map(r => {
+        const out = {};
+        NBH_COLUMNS.forEach(c => out[c] = r[c] || "-");
+        return out;
+      });
+
+      try {
+        const res = await api(`/processing/jobs/${currentJob.job_id}/corrections`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ corrections: { rows: cleanRows } })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Save failed.");
         renderJob(data);
-        document.getElementById("reviewStatus").textContent = "Edits saved and validation rerun.";
+        originalRowsJson = JSON.stringify(localRows);
+        updateUnsavedCounter();
+        alert("✓ All changes saved successfully!");
+      } catch (err) {
+        alert("Error saving: " + err.message);
+      } finally {
+        saveBtn.disabled = false;
       }
     }
 
@@ -761,50 +1640,181 @@
       const data = await res.json();
       if (res.ok) {
         renderJob(data);
-        document.getElementById("reviewStatus").textContent = "Mappings confirmed and validation rerun.";
       }
     }
 
-    async function approveJob() {
+    function openApproveModal() {
       if (!currentJob) return;
-      const res = await api(`/processing/jobs/${currentJob.job_id}/approve`, {
-        method: "POST",
-        headers: authHeaders()
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const modal = document.getElementById("modalApprove");
+      const details = document.getElementById("approveModalDetails");
+      details.textContent = `${localRows.length} transactions will be included across 12 NoBrokerHood columns.`;
+      openModal("modalApprove");
+    }
+
+    async function confirmApprove() {
+      if (!currentJob) return;
+      closeModal("modalApprove");
+      const approveBtn = document.getElementById("approveBtn");
+      approveBtn.disabled = true;
+
+      try {
+        const res = await api(`/processing/jobs/${currentJob.job_id}/approve`, {
+          method: "POST",
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Approval failed.");
         renderJob(data);
-        document.getElementById("reviewStatus").textContent = "Processing complete. Excel is ready.";
-      } else {
-        document.getElementById("reviewStatus").textContent = data.detail || "Approval blocked.";
+        alert("✓ Approved! Downloading generated Excel now...");
+        downloadExcel(currentJob.job_id, currentJob.output_filename);
+      } catch (err) {
+        alert("Approval issue: " + err.message);
+      } finally {
+        approveBtn.disabled = false;
       }
     }
 
-    async function rejectJob() {
+    function openRejectModal() {
+      openModal("modalReject");
+    }
+
+    async function confirmReject() {
       if (!currentJob) return;
-      const res = await api(`/processing/jobs/${currentJob.job_id}/reject`, {
-        method: "POST",
-        headers: authHeaders()
-      });
-      const data = await res.json();
-      if (res.ok) {
-        renderJob(data);
-        document.getElementById("reviewStatus").textContent = "Job rejected. No output generated.";
+      const reason = document.querySelector('input[name="rejectReason"]:checked')?.value || "OTHER";
+      const comments = document.getElementById("rejectComments").value;
+      closeModal("modalReject");
+
+      try {
+        const res = await api(`/processing/jobs/${currentJob.job_id}/reject`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ reason, comments })
+        });
+        const data = await res.json();
+        if (res.ok) renderJob(data);
+      } catch (err) {
+        alert("Rejection issue: " + err.message);
       }
     }
 
-    async function downloadExcel() {
-      if (!currentJob) return;
-      const res = await api(`/processing/jobs/${currentJob.job_id}/download`);
-      if (!res.ok) return;
+    async function downloadExcel(jobId, filename) {
+      const id = jobId || currentJob?.job_id;
+      if (!id) return;
+      const res = await api(`/processing/jobs/${id}/download`);
+      if (!res.ok) {
+        alert("Download failed.");
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = currentJob.output_filename || "accounting_output.xlsx";
+      a.download = filename || "nobrokerhood_accounting.xlsx";
       a.click();
       URL.revokeObjectURL(url);
     }
+
+    async function openSourcePreviewModal() {
+      const body = document.getElementById("previewModalBody");
+      openModal("modalPreview");
+      if (localSourceFileUrl) {
+        if (localSourceFileBlob?.type === "application/pdf") {
+          body.innerHTML = `<iframe title="Source Document" src="${localSourceFileUrl}" style="width: 100%; height: 580px; border: 0;"></iframe>`;
+        } else {
+          body.innerHTML = `<img alt="Source Document" src="${localSourceFileUrl}" style="max-width: 100%; max-height: 580px; object-fit: contain; margin: 0 auto; display: block;">`;
+        }
+      } else if (currentJob?.job_id) {
+        body.innerHTML = `<div style="display: grid; place-items: center; height: 500px; color: var(--muted);">Fetching original document from secure storage...</div>`;
+        try {
+          const res = await api(`/processing/jobs/${currentJob.job_id}/source`);
+          if (!res.ok) throw new Error("Document preview unavailable.");
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          if (blob.type === "application/pdf" || (currentJob.source_filename && currentJob.source_filename.toLowerCase().endsWith(".pdf"))) {
+            body.innerHTML = `<iframe title="Source Document" src="${objUrl}" style="width: 100%; height: 580px; border: 0;"></iframe>`;
+          } else {
+            body.innerHTML = `<img alt="Source Document" src="${objUrl}" style="max-width: 100%; max-height: 580px; object-fit: contain; margin: 0 auto; display: block;">`;
+          }
+        } catch (err) {
+          body.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--danger);">Unable to load document: ${escapeHtml(err.message)}</div>`;
+        }
+      } else {
+        body.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--muted);">Original file preview is available for uploaded documents.</div>`;
+      }
+    }
+
+    function scrollToUpload() {
+      document.getElementById("sectionUpload").scrollIntoView({ behavior: "smooth" });
+    }
+
+    // Past Work Functions
+    async function loadPastWork() {
+      const tbody = document.getElementById("pastWorkBody");
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">Loading previous jobs...</td></tr>`;
+      try {
+        const res = await api("/processing/jobs");
+        const data = await res.json();
+        pastJobs = data.jobs || [];
+        filterPastWork();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 24px;">Failed to load past jobs: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function filterPastWork() {
+      const q = (document.getElementById("pastWorkSearch")?.value || "").toLowerCase().trim();
+      const tbody = document.getElementById("pastWorkBody");
+      const filtered = pastJobs.filter(j => {
+        if (!q) return true;
+        return (j.source_filename || "").toLowerCase().includes(q) || (j.purpose || "").toLowerCase().includes(q) || (j.job_id || "").toLowerCase().includes(q);
+      });
+
+      if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">No previous jobs found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(j => {
+        const rowCount = (j.mapping_result?.mapped_data?.rows || j.extracted_data?.rows || []).length;
+        const statusCls = j.overall_status === "COMPLETED" ? "ok" : (j.overall_status === "FAILED" ? "bad" : "warn");
+        const friendlyStatus = j.overall_status === "COMPLETED" ? "Completed" : (j.overall_status === "FAILED" ? "Failed" : "Needs Review");
+
+        let actions = `<button class="secondary" style="min-height: 28px; padding: 0 10px; font-size: 12px;" onclick="reopenJob('${j.job_id}')">View / Review</button>`;
+        if (j.overall_status === "COMPLETED" || j.output_filename) {
+          actions += ` <button class="primary" style="min-height: 28px; padding: 0 10px; font-size: 12px; margin-left: 4px;" onclick="downloadExcel('${j.job_id}', '${j.output_filename}')">Download Excel</button>`;
+        }
+
+        return `<tr>
+          <td><strong>${escapeHtml(j.source_filename || j.job_id)}</strong></td>
+          <td>${escapeHtml(j.purpose || "-")}</td>
+          <td>${escapeHtml(j.created_at || "-")}</td>
+          <td>${rowCount} tx</td>
+          <td><span class="badge ${statusCls}">${friendlyStatus}</span></td>
+          <td>${actions}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    async function reopenJob(jobId) {
+      showView("accounting");
+      const res = await api(`/processing/jobs/${jobId}`);
+      if (res.ok) {
+        const job = await res.json();
+        renderJob(job);
+        document.getElementById("sectionReview").scrollIntoView({ behavior: "smooth" });
+      }
+    }
+
+    function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
+    function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
+    window.addEventListener("beforeunload", (e) => {
+      if (JSON.stringify(localRows) !== originalRowsJson) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    });
 
     async function logout() {
       await fetch(BASE_URL + "/auth/logout", {

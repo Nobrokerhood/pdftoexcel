@@ -1,0 +1,48 @@
+# Git and VCS
+.git/
+.gitignore
+.github/
+
+# Secrets and local credentials (CRITICAL - NEVER INCLUDE IN DOCKER IMAGE)
+.env
+.env.*
+service-account.json
+service_account.json
+credentials.json
+*secret*.json
+*credentials*.json
+
+# Local virtual environment
+.venv/
+venv/
+env/
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local testing and scratch files
+scratch/
+testing_folder/
+tests/
+audit/
+
+# Temporary and log files
+*.log
+*.xlsx
+*.xls
+*.csv
+*.pdf
+tmp/
+temp/
+
+# Documentation and IDE configs
+docs/
+.vscode/
+.idea/
+*.md
+!README.md

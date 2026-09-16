@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app.auth.dependencies import bearer_token, require_session
 from app.auth.google_auth import AuthError
 from app.auth.sessions import SessionError
-from app.auth.user_master import AuthorizationError
+from app.auth.user_master import AuthorizationError, AuthorizedUser
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -14,9 +14,27 @@ class GoogleLoginRequest(BaseModel):
     credential: str
 
 
+class DevLoginRequest(BaseModel):
+    email: str = "tester@nobroker.in"
+    name: str = "Test User"
+
+
 class HeartbeatRequest(BaseModel):
     user_active: bool = True
     page_visible: bool = True
+
+
+@router.post("/dev-login")
+async def dev_login(request: Request, data: DevLoginRequest | None = None):
+    if not request.app.state.settings.allow_dev_login or request.app.state.settings.environment == "production":
+        raise HTTPException(status_code=403, detail="DEV_LOGIN_DISABLED")
+    email = (data.email if data else "tester@nobroker.in") or "tester@nobroker.in"
+    name = (data.name if data else "Test User") or "Test User"
+    user = AuthorizedUser(email=email, name=name, role="ADMIN", active=True)
+    session = request.app.state.session_service.create_session(user)
+    response = session.public_dict()
+    response["session_token"] = session.token
+    return response
 
 
 @router.post("/google-login")

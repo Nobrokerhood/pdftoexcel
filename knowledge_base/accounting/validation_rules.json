@@ -1,0 +1,41 @@
+{
+  "description": "Catalog of deterministic accounting rules implemented in app/intelligence/rules.py. Severity CRITICAL blocks approval; WARNING requires reviewer attention. Parameters are configuration, not code.",
+  "parameters": {
+    "rounding_tolerance": 1.0,
+    "gst_rate_tolerance_percent": 0.2,
+    "earliest_valid_year": 2000,
+    "future_date_tolerance_days": 3,
+    "low_confidence_blocks_approval": true,
+    "max_ambiguous_amounts_for_total_repair": 10
+  },
+  "mandatory_fields": {
+    "MEMBER_RECEIPT": ["amount", "transaction_date", "payment_type", "reference_number", "tower", "flat", "bill_head", "bank_name_or_code"],
+    "VENDOR_INVOICE": ["bill_number", "bill_date", "vendor_name", "expenses"],
+    "PETTY_CASH_REGISTER": ["rows"]
+  },
+  "rules": [
+    {"id": "DOC_PURPOSE_MATCH", "applies_to": ["*"], "severity": "CRITICAL", "description": "Detected document type must be processable by the selected purpose.", "kb": ["DOCUMENT_TYPES"]},
+    {"id": "DOC_DUPLICATE", "applies_to": ["*"], "severity": "WARNING", "description": "The same file (SHA-256) was processed before; CRITICAL if that job completed.", "kb": ["DUPLICATES"]},
+    {"id": "FIELD_REQUIRED", "applies_to": ["MEMBER_RECEIPT", "VENDOR_INVOICE"], "severity": "CRITICAL", "description": "Mandatory fields must be present in the source.", "kb": []},
+    {"id": "FIELD_LOW_CONFIDENCE", "applies_to": ["*"], "severity": "CRITICAL", "description": "Fields with LOW confidence or AMBIGUOUS status require human confirmation.", "kb": ["HANDWRITTEN_AMOUNTS"]},
+    {"id": "AMOUNT_POSITIVE", "applies_to": ["*"], "severity": "CRITICAL", "description": "Amounts must parse as numbers and be greater than zero.", "kb": ["INDIAN_NUMBERING"]},
+    {"id": "DATE_VALID", "applies_to": ["*"], "severity": "CRITICAL", "description": "Dates must be real calendar dates, not in the future and not before the earliest valid year.", "kb": []},
+    {"id": "RECEIPT_AMOUNT_IN_WORDS", "applies_to": ["MEMBER_RECEIPT"], "severity": "CRITICAL", "description": "When the amount is also written in words, both must agree.", "kb": []},
+    {"id": "RECEIPT_REFERENCE_FORMAT", "applies_to": ["MEMBER_RECEIPT"], "severity": "WARNING", "description": "Reference number must be consistent with the payment mode (UTR for NEFT/RTGS, 12 digits for IMPS/UPI, 6 digits for cheque).", "kb": ["BANK_RECONCILIATION"]},
+    {"id": "RECEIPT_CHEQUE_DETAILS", "applies_to": ["MEMBER_RECEIPT"], "severity": "CRITICAL", "description": "Cheque payments need a cheque number and cheque date.", "kb": []},
+    {"id": "INVOICE_GSTIN_FORMAT", "applies_to": ["VENDOR_INVOICE"], "severity": "WARNING", "description": "GSTIN must match the 15-character format.", "kb": ["GSTIN_FORMAT"]},
+    {"id": "INVOICE_GST_SPLIT", "applies_to": ["VENDOR_INVOICE"], "severity": "CRITICAL", "description": "Either CGST = SGST with IGST zero (intra-state) or IGST only (inter-state).", "kb": ["GST_INTRA_STATE", "GST_INTER_STATE"]},
+    {"id": "INVOICE_GST_RATE", "applies_to": ["VENDOR_INVOICE"], "severity": "WARNING", "description": "Effective GST rate must be a valid slab for the invoice date.", "kb": []},
+    {"id": "INVOICE_PLACE_OF_SUPPLY", "applies_to": ["VENDOR_INVOICE"], "severity": "WARNING", "description": "IGST vs CGST/SGST must agree with supplier and recipient GSTIN state codes when both are present.", "kb": ["GST_INTER_STATE"]},
+    {"id": "INVOICE_LINE_TOTAL", "applies_to": ["VENDOR_INVOICE"], "severity": "CRITICAL", "description": "Sum of line items must equal the taxable value.", "kb": []},
+    {"id": "INVOICE_GRAND_TOTAL", "applies_to": ["VENDOR_INVOICE"], "severity": "CRITICAL", "description": "Taxable value + taxes + cess must equal the invoice total within rounding tolerance.", "kb": ["GST_TOTAL"]},
+    {"id": "INVOICE_TDS", "applies_to": ["VENDOR_INVOICE"], "severity": "WARNING", "description": "TDS must not exceed taxable value and should match a recognised section rate; section applicability is POLICY_REQUIRED.", "kb": ["TDS_BASE"]},
+    {"id": "REGISTER_ROW_COMPLETE", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "CRITICAL", "description": "Each row needs a date, particulars and amount; payment rows need a voucher number.", "kb": ["PETTY_CASH"]},
+    {"id": "REGISTER_VOUCHER_SEQUENCE", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "WARNING", "description": "Voucher numbers should not repeat; gaps are reported.", "kb": ["DUPLICATES"]},
+    {"id": "REGISTER_DUPLICATE_ROW", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "WARNING", "description": "Rows with the same date, amount and similar particulars are possible duplicates.", "kb": ["DUPLICATES"]},
+    {"id": "REGISTER_DATE_PERIOD", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "WARNING", "description": "Row dates should fall inside the register period and be chronological.", "kb": ["DATE_WITHIN_PERIOD"]},
+    {"id": "REGISTER_COLUMN_TOTAL", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "CRITICAL", "description": "Sum of payment rows must equal the written payment total; same for receipts.", "kb": ["PETTY_CASH"]},
+    {"id": "REGISTER_RECONCILIATION", "applies_to": ["PETTY_CASH_REGISTER"], "severity": "CRITICAL", "description": "Opening balance + receipts - payments = closing balance (only when opening and closing balances are readable).", "kb": ["PETTY_CASH", "CASH_BOOK"]},
+    {"id": "MAPPING_REQUIRED", "applies_to": ["*"], "severity": "CRITICAL", "description": "Every mapped field needs an active Mapping_Master entry.", "kb": ["SOCIETY_BILL_HEADS"]}
+  ]
+}

@@ -34,26 +34,28 @@ class TemplateDefinition:
         }
 
 
+NBH_IMPORT_COLUMNS = (
+    "Payment Type*",
+    "Society Bank Name/Bank code(Given to you by nobrokerhood)*",
+    "Cheque/Ref No*",
+    "Tower No*",
+    "Flat No*",
+    "Bill Head*",
+    "Amount*",
+    "Transaction Date*",
+    "Comments",
+    "Meter No",
+    "Cheque Issuer Bank",
+    "Cheque Date",
+)
+
 MEMBER_RECEIPT_TEMPLATE = TemplateDefinition(
     purpose=MEMBER_RECEIPT,
     template_code="NBH_MEMBER_RECEIPT_V1",
     template_name="NBH Member Receipt Import v1",
     version="1",
     output_format="CSV",
-    fields=(
-        "Payment Type",
-        "Society Bank Name/Bank code",
-        "Cheque/Ref No",
-        "Tower No",
-        "Flat No",
-        "Bill Head",
-        "Amount",
-        "Transaction Date",
-        "Comments",
-        "Meter No",
-        "Cheque Issuer Bank",
-        "Cheque Date",
-    ),
+    fields=NBH_IMPORT_COLUMNS,
 )
 
 VENDOR_INVOICE_TEMPLATE = TemplateDefinition(

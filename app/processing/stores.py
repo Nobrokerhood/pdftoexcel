@@ -173,9 +173,24 @@ class GoogleSheetsProcessingJobStore(InMemoryProcessingJobStore):
     def list_for_user(self, email: str) -> list[ProcessingJob]:
         jobs = []
         for record in self.sheets_service.read_table("job_state"):
-            state = json.loads(record.get("State JSON", "{}") or "{}")
-            if state.get("user_email") == email:
-                jobs.append(job_from_state(state))
+            raw_json = record.get("State JSON", "{}") or "{}"
+            try:
+                state = json.loads(raw_json)
+            except Exception:
+                state = {
+                    "job_id": record.get("Job ID", ""),
+                    "user_email": record.get("User Email", ""),
+                    "purpose": record.get("Purpose", "MEMBER_RECEIPT"),
+                    "source_filename": record.get("Filename", "Document"),
+                    "overall_status": record.get("Status", "NEEDS_REVIEW"),
+                    "current_step": record.get("Status", "NEEDS_REVIEW"),
+                    "created_at": record.get("Updated At", ""),
+                }
+            if str(state.get("user_email", "")).strip().lower() == str(email).strip().lower():
+                try:
+                    jobs.append(job_from_state(state))
+                except Exception:
+                    pass
         return jobs
 
     def list_jobs(self, email: str) -> list[ProcessingJob]:
@@ -191,7 +206,18 @@ class GoogleSheetsProcessingJobStore(InMemoryProcessingJobStore):
         )
         if not record:
             raise KeyError("JOB_NOT_FOUND")
-        return json.loads(record.get("State JSON", "{}") or "{}")
+        raw_json = record.get("State JSON", "{}") or "{}"
+        try:
+            return json.loads(raw_json)
+        except Exception:
+            return {
+                "job_id": record.get("Job ID", job_id),
+                "user_email": record.get("User Email", ""),
+                "purpose": record.get("Purpose", "MEMBER_RECEIPT"),
+                "source_filename": record.get("Filename", "Document"),
+                "overall_status": record.get("Status", "NEEDS_REVIEW"),
+                "current_step": record.get("Status", "NEEDS_REVIEW"),
+            }
 
     def _append_or_update_state(self, job: ProcessingJob) -> bool:
         state = job_to_state(job)

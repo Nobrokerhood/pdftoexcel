@@ -1,0 +1,16 @@
+{
+  "description": "Common TDS sections for society vendor payments, used only to check that a TDS amount corresponds to a recognised rate. Which section applies to a given vendor, thresholds, PAN availability (higher rate) and lower-deduction certificates are company/tax-advisor policy: TDS_SECTION_POLICY is POLICY_REQUIRED.",
+  "sections": [
+    {"section": "194C", "nature": "Payments to contractors", "rates": [1, 2], "note": "1% individual/HUF, 2% others."},
+    {"section": "194J", "nature": "Fees for professional or technical services", "rates": [2, 10], "note": "2% technical services, 10% professional services."},
+    {"section": "194I", "nature": "Rent", "rates": [2, 10], "note": "2% plant/machinery/equipment, 10% land/building/furniture."},
+    {"section": "194H", "nature": "Commission or brokerage", "rates": [2], "note": "Rate as applicable from 1 Oct 2024."},
+    {"section": "194Q", "nature": "Purchase of goods", "rates": [0.1], "note": "Applies only above turnover/value thresholds."}
+  ],
+  "rules": [
+    {"id": "TDS_BASE", "text": "TDS is normally computed on the value excluding GST when GST is shown separately on the invoice."},
+    {"id": "TDS_NOT_EXCEED", "text": "TDS cannot exceed the taxable value."},
+    {"id": "TDS_NO_PAN", "text": "Without a valid PAN, TDS is deducted at a higher rate (commonly 20%)."}
+  ],
+  "no_pan_rate": 20
+}

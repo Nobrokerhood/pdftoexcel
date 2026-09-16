@@ -1,0 +1,24 @@
+{
+  "description": "Indian GST reference data used for deterministic tax checks. Rate slabs are validated against the invoice date. Whether input tax credit is claimed, and which ledger receives GST, is company policy (see policies.json).",
+  "rate_slabs": [
+    {"effective_from": "2017-07-01", "effective_to": "2025-09-21", "rates": [0, 0.25, 3, 5, 12, 18, 28], "note": "Original GST slab structure (0.25% and 3% apply to specific goods)."},
+    {"effective_from": "2025-09-22", "effective_to": null, "rates": [0, 0.25, 3, 5, 18, 40], "note": "Rationalised slab structure from 22 Sep 2025 (12% and 28% slabs merged into 5%/18%; 40% for specified goods)."}
+  ],
+  "rules": [
+    {"id": "GST_INTRA_STATE", "text": "An intra-state supply (supplier and recipient in the same state) is taxed as CGST + SGST (or UTGST) in equal halves of the GST rate. IGST must be zero."},
+    {"id": "GST_INTER_STATE", "text": "An inter-state supply is taxed as IGST at the full rate. CGST and SGST must be zero."},
+    {"id": "GST_TOTAL", "text": "Invoice total = taxable value + CGST + SGST + IGST + cess, subject to rounding (round-off line)."},
+    {"id": "GSTIN_FORMAT", "text": "GSTIN is 15 characters: 2-digit state code, 10-character PAN, entity number, 'Z', check character."},
+    {"id": "GST_TDS_SEPARATE", "text": "TDS is deducted by the payer from the amount payable; it does not reduce the invoice total or the GST."}
+  ],
+  "gstin_pattern": "^[0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$",
+  "state_codes": {
+    "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand",
+    "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim",
+    "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya",
+    "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh",
+    "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka", "30": "Goa",
+    "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman and Nicobar Islands",
+    "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory"
+  }
+}

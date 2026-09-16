@@ -5,16 +5,14 @@ import logging
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
-from pdf2image import convert_from_bytes
-from PIL import Image, UnidentifiedImageError
 
-from app.core.errors import ServiceNotConfiguredError
+from app.core.errors import ExternalServiceUnavailableError
+from app.documents.ingestion import SUPPORTED_DOCUMENT_TYPES, InvalidImageError, load_page_images
+from app.documents.pdf_images import InvalidPdfError, PdfDependencyMissingError
 from app.services.gemini_client import GeminiDocumentClient
 
 
 logger = logging.getLogger(__name__)
-
-SUPPORTED_DOCUMENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 
 
 def create_template_prompt() -> str:
@@ -64,7 +62,9 @@ def _parse_json_array(text: str):
     return json.loads(cleaned)
 
 
-async def get_images_from_upload(file: UploadFile, max_file_size_mb: int):
+async def get_images_from_upload(
+    file: UploadFile, max_file_size_mb: int, poppler_path: str | None = None
+):
     if file.content_type not in SUPPORTED_DOCUMENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
@@ -75,23 +75,17 @@ async def get_images_from_upload(file: UploadFile, max_file_size_mb: int):
             detail=f"File exceeds {max_file_size_mb} MB limit. Please split first.",
         )
 
-    if file.content_type == "application/pdf":
-        try:
-            images = []
-            for page in convert_from_bytes(file_bytes, dpi=100, fmt="jpeg"):
-                images.append(page.convert("RGB"))
-                page.close()
-            gc.collect()
-            return images
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500, detail=f"PDF processing failed: {exc}"
-            ) from exc
-
     try:
-        return [Image.open(io.BytesIO(file_bytes)).convert("RGB")]
-    except UnidentifiedImageError as exc:
+        return load_page_images(file_bytes, poppler_path, dpi=100)
+    except PdfDependencyMissingError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except InvalidPdfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except InvalidImageError as exc:
         raise HTTPException(status_code=400, detail="Invalid image file.") from exc
+    except Exception as exc:
+        logger.error("PDF processing failed: %s", exc)
+        raise HTTPException(status_code=500, detail="PDF processing failed.") from exc
 
 
 async def convert_to_template_csv(
@@ -99,7 +93,9 @@ async def convert_to_template_csv(
     max_file_size_mb: int,
     gemini_client: GeminiDocumentClient,
 ) -> str:
-    images = await get_images_from_upload(file, max_file_size_mb)
+    images = await get_images_from_upload(
+        file, max_file_size_mb, gemini_client.settings.poppler_path
+    )
     rows = []
 
     try:
@@ -107,7 +103,7 @@ async def convert_to_template_csv(
             try:
                 resp = gemini_client.generate_content([create_template_prompt(), img])
                 rows.extend(_parse_json_array(resp.text))
-            except ServiceNotConfiguredError:
+            except ExternalServiceUnavailableError:
                 raise
             except Exception as exc:
                 logger.error("Template conversion page failed: %s", exc)
@@ -130,7 +126,9 @@ async def export_as_excel(
     max_file_size_mb: int,
     gemini_client: GeminiDocumentClient,
 ) -> io.BytesIO:
-    images = await get_images_from_upload(file, max_file_size_mb)
+    images = await get_images_from_upload(
+        file, max_file_size_mb, gemini_client.settings.poppler_path
+    )
     all_data = []
     unified_columns = None
 
@@ -153,7 +151,7 @@ async def export_as_excel(
                     )
                 else:
                     all_data.extend(data)
-            except ServiceNotConfiguredError:
+            except ExternalServiceUnavailableError:
                 raise
             except Exception as exc:
                 logger.error("Error processing page %s: %s", page_count, exc)

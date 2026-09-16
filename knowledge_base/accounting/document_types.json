@@ -1,0 +1,77 @@
+{
+  "description": "Signals used by the deterministic document classifier. Keyword weights add evidence for a type; structural signals are computed from OCR layout (rows, dates, amounts). Keywords are matched case-insensitively with light fuzzy matching for OCR noise.",
+  "types": {
+    "MEMBER_RECEIPT": {
+      "label": "Member Receipt",
+      "description": "Proof of one payment made by a member/flat to the society: bank acknowledgement (NEFT/RTGS/IMPS/UPI), cheque receipt or society receipt.",
+      "keywords": {
+        "transaction successful": 3, "funds transfer": 3, "acknowledgement": 2, "utr": 3, "reference no": 2,
+        "remitter": 3, "beneficiary": 2, "amount paid": 3, "payment receipt": 3, "receipt no": 2,
+        "received from": 2, "maintenance": 1, "flat": 2, "tower": 2, "neft": 2, "rtgs": 2, "imps": 2, "upi": 2,
+        "rupees": 1, "only": 0.5, "ifsc": 1
+      },
+      "structure": {"single_primary_amount": 3, "flat_reference": 3, "many_dated_amount_rows": -4}
+    },
+    "VENDOR_INVOICE": {
+      "label": "Vendor Invoice",
+      "description": "A supplier's bill to the society for goods or services, usually with GST breakup.",
+      "keywords": {
+        "tax invoice": 4, "invoice": 3, "invoice no": 3, "bill no": 2, "gstin": 3, "taxable value": 3,
+        "taxable": 2, "cgst": 3, "sgst": 3, "igst": 3, "hsn": 2, "sac": 2, "bill to": 2, "place of supply": 2,
+        "grand total": 2, "total amount": 1, "due date": 1, "vendor": 1, "supplier": 1
+      },
+      "structure": {"gstin_present": 3, "tax_breakup": 3, "many_dated_amount_rows": -3}
+    },
+    "PETTY_CASH_REGISTER": {
+      "label": "Petty Cash Register",
+      "description": "A cash book kept by the society office: cash received (withdrawals/imprest) and many small cash payments with voucher numbers and a running or closing balance.",
+      "keywords": {
+        "petty cash": 5, "expenditure": 3, "particulars": 2, "voucher": 2, "vr no": 2, "balance": 2,
+        "carry forward": 3, "carried forward": 3, "brought forward": 3, "cash withdrawn": 3, "cash with drawn": 3,
+        "salary": 1, "tea": 1, "petrol": 1, "s.no": 1, "opening balance": 2, "closing balance": 2
+      },
+      "structure": {"many_dated_amount_rows": 5, "voucher_sequence": 4, "balance_line": 3, "month_header": 2, "handwritten": 1}
+    },
+    "CASH_BOOK": {
+      "label": "Cash Book",
+      "description": "Two-sided cash book with receipts (Dr) and payments (Cr) columns.",
+      "keywords": {"cash book": 5, "receipts": 2, "payments": 2, "dr": 1, "cr": 1, "to balance": 2, "by balance": 2, "balance b/d": 3, "balance c/d": 3},
+      "structure": {"many_dated_amount_rows": 4, "balance_line": 3, "dr_cr_columns": 3}
+    },
+    "EXPENSE_REGISTER": {
+      "label": "Expense Register",
+      "description": "List of expenses without cash receipts or balances.",
+      "keywords": {"expense register": 5, "expenses": 2, "expenditure": 2, "particulars": 1, "amount": 1},
+      "structure": {"many_dated_amount_rows": 4, "balance_line": -2}
+    },
+    "GENERAL_LEDGER": {
+      "label": "General Ledger",
+      "description": "Account-wise ledger with debit/credit columns and running balance, usually system generated.",
+      "keywords": {"general ledger": 5, "ledger": 3, "account head": 2, "debit": 2, "credit": 2, "opening balance": 1, "closing balance": 1, "narration": 1, "dr": 1, "cr": 1},
+      "structure": {"many_dated_amount_rows": 3, "dr_cr_columns": 4, "voucher_sequence": 1}
+    },
+    "BANK_STATEMENT": {
+      "label": "Bank Statement",
+      "description": "Bank account statement with withdrawals, deposits and balance per transaction.",
+      "keywords": {"statement of account": 5, "account statement": 4, "withdrawal": 3, "deposit": 3, "value date": 3, "chq/ref": 2, "closing balance": 1, "ifsc": 1, "branch": 1},
+      "structure": {"many_dated_amount_rows": 3, "dr_cr_columns": 2}
+    },
+    "JOURNAL": {
+      "label": "Journal",
+      "description": "Journal entries with Dr/Cr accounts and narration.",
+      "keywords": {"journal": 5, "journal voucher": 5, "jv no": 3, "being": 2, "dr.": 2, "to ": 1},
+      "structure": {"dr_cr_columns": 3}
+    },
+    "PAYMENT_VOUCHER": {
+      "label": "Payment Voucher",
+      "description": "One cash/bank payment authorised by the society, with payee and approval signatures.",
+      "keywords": {"payment voucher": 5, "cash voucher": 5, "paid to": 3, "receiver's signature": 3, "receiver signature": 3, "authorised by": 2, "approved by": 1, "debit a/c": 2},
+      "structure": {"single_primary_amount": 2, "many_dated_amount_rows": -3}
+    }
+  },
+  "thresholds": {
+    "minimum_confidence_for_mismatch": 0.6,
+    "many_rows": 5,
+    "unknown_below_score": 4
+  }
+}

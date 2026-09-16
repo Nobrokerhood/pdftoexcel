@@ -1,0 +1,14 @@
+{
+  "description": "NoBrokerHood/society-specific accounting policies. None of these are defined in the project requirements or configuration, so each is POLICY_REQUIRED: the system reports them instead of assuming an answer. Set status to DEFINED and fill 'value' only when the business confirms the policy.",
+  "policies": [
+    {"id": "EXPENSE_LEDGER_CODES", "status": "POLICY_REQUIRED", "value": null, "question": "Which ledger/expense code does each expense category post to?", "source_of_truth": "Mapping_Master (Mapping Type EXPENSE_CATEGORY / EXPENSE)"},
+    {"id": "BILL_HEAD_CODES", "status": "POLICY_REQUIRED", "value": null, "question": "Which code is used for each member bill head?", "source_of_truth": "Mapping_Master (Mapping Type BILL_HEAD)"},
+    {"id": "SOCIETY_BANK_CODES", "status": "POLICY_REQUIRED", "value": null, "question": "Which code identifies each society bank account?", "source_of_truth": "Mapping_Master (Mapping Type BANK)"},
+    {"id": "PETTY_CASH_IMPREST_LIMIT", "status": "POLICY_REQUIRED", "value": null, "question": "What is the approved petty cash float / maximum cash payment per voucher?"},
+    {"id": "SALARY_THROUGH_PETTY_CASH", "status": "POLICY_REQUIRED", "value": null, "question": "Are staff salaries and salary advances allowed to be paid from petty cash?"},
+    {"id": "TDS_SECTION_POLICY", "status": "POLICY_REQUIRED", "value": null, "question": "Which TDS section and rate apply to each vendor, and what thresholds does the society apply?"},
+    {"id": "GST_INPUT_CREDIT", "status": "POLICY_REQUIRED", "value": null, "question": "Does the society claim GST input tax credit (GST to input ledger) or expense it (GST added to cost)?"},
+    {"id": "REGISTER_IMPORT_TEMPLATE", "status": "POLICY_REQUIRED", "value": null, "question": "Is there an NBH import template for petty cash registers? Until defined, register output is a review workbook, not an import file."},
+    {"id": "ROUNDING_TOLERANCE", "status": "TECHNICAL_DEFAULT", "value": 1.0, "question": "Maximum rupee difference accepted as rounding. 1.00 is a technical default pending confirmation."}
+  ]
+}

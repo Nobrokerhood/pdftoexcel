@@ -1,0 +1,66 @@
+{
+  "description": "Field labels and value vocabularies used by the local extraction agents. Labels are matched against OCR text; values must appear in the source, never inferred.",
+  "member_receipt_labels": {
+    "amount": ["amount paid", "amount received", "total amount", "amount", "paid amount", "transfer amount"],
+    "transaction_date": ["transaction date", "payment date", "date of payment", "value date", "txn date", "date"],
+    "payment_type": ["payment mode", "mode of payment", "transfer type", "payment type", "mode"],
+    "reference_number": ["utr / reference no", "utr no", "utr number", "utr", "reference no", "reference number", "ref no", "transaction id", "txn id", "cheque no", "cheque number", "chq no"],
+    "bank_name_or_code": ["beneficiary bank", "society bank", "credited to bank", "bank name", "bank"],
+    "comments": ["remarks", "narration", "purpose", "description", "comments"],
+    "remitter": ["remitter name", "paid by", "received from", "sender name", "payer"],
+    "cheque_issuer_bank": ["drawn on", "issuer bank", "cheque bank"],
+    "cheque_date": ["cheque date", "chq date"],
+    "meter_number": ["meter no", "meter number"]
+  },
+  "vendor_invoice_labels": {
+    "bill_number": ["invoice no", "invoice number", "bill no", "bill number", "inv no"],
+    "bill_date": ["invoice date", "bill date", "date"],
+    "due_date": ["due date", "payment due"],
+    "vendor_gstin": ["gstin", "gst no", "gstin/uin"],
+    "taxable_value": ["taxable value", "taxable amount", "sub total", "subtotal"],
+    "cgst_amount": ["cgst"],
+    "sgst_amount": ["sgst", "utgst"],
+    "igst_amount": ["igst"],
+    "cess_amount": ["cess"],
+    "total_amount": ["grand total", "invoice total", "total amount", "net amount", "total"],
+    "tds_amount": ["tds", "tax deducted at source"],
+    "place_of_supply": ["place of supply"]
+  },
+  "payment_modes": {
+    "NEFT": ["neft"],
+    "RTGS": ["rtgs"],
+    "IMPS": ["imps"],
+    "UPI": ["upi", "bhim", "gpay", "phonepe", "paytm"],
+    "CHEQUE": ["cheque", "chq", "check"],
+    "CASH": ["cash"],
+    "CARD": ["debit card", "credit card", "card"],
+    "NET_BANKING": ["net banking", "netbanking", "internet banking"]
+  },
+  "reference_patterns": {
+    "NEFT": "^[A-Z]{4}[A-Z0-9]{12,18}$",
+    "RTGS": "^[A-Z]{4}[A-Z0-9]{12,18}$",
+    "IMPS": "^\\d{12}$",
+    "UPI": "^\\d{12}$",
+    "CHEQUE": "^\\d{6}$"
+  },
+  "flat_patterns": [
+    "(?:tower|wing|block|bldg)\\s*[-:]?\\s*(?P<tower>[A-Z0-9]{1,3})\\s*[,/-]?\\s*(?:flat|unit|apt|apartment)\\s*(?:no\\.?)?\\s*[-:]?\\s*(?P<flat>[A-Z]?\\d{1,5})",
+    "(?:flat|unit)\\s*(?:no\\.?)?\\s*[-:]?\\s*(?P<tower>[A-Z])\\s*[-/]\\s*(?P<flat>\\d{1,5})"
+  ],
+  "bill_heads": {
+    "Maintenance": ["maintenance", "maint", "cam charges", "common area maintenance"],
+    "Water Charges": ["water charges", "water bill"],
+    "Sinking Fund": ["sinking fund"],
+    "Repair Fund": ["repair fund", "major repair"],
+    "Electricity Charges": ["electricity", "power charges"],
+    "Parking Charges": ["parking"],
+    "Clubhouse Charges": ["clubhouse", "club house"],
+    "Interest / Late Fee": ["late fee", "interest on arrears", "penalty"]
+  },
+  "handwriting": {
+    "amount_suffixes": ["/-", "/", "-"],
+    "suffix_misreads": ["1-", "1/-", "l-", "|-", "1", "/1"],
+    "digit_confusions": [["4", "7"], ["7", "4"], ["1", "7"], ["7", "1"], ["4", "9"], ["9", "4"], ["3", "8"], ["8", "3"], ["5", "6"], ["6", "5"], ["0", "6"], ["6", "0"], ["8", "0"], ["0", "8"], ["9", "2"], ["2", "9"], ["2", "7"]],
+    "letter_to_digit": {"O": "0", "o": "0", "D": "0", "d": "0", "Q": "0", "l": "1", "I": "1", "|": "1", "i": "1", "B": "8", "S": "5", "s": "5", "Z": "2", "z": "2", "g": "9", "q": "9", "G": "6", "b": "6", "T": "7"}
+  }
+}

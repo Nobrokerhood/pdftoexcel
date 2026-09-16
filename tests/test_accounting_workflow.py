@@ -326,14 +326,14 @@ def test_member_receipt_happy_path_generates_exact_xlsx_after_approval():
     wb = load_workbook(io.BytesIO(downloaded.content))
     columns = [cell.value for cell in next(wb.active.iter_rows(max_row=1))]
     assert columns == [
-        "Payment Type",
-        "Society Bank Name/Bank code",
-        "Cheque/Ref No",
-        "Tower No",
-        "Flat No",
-        "Bill Head",
-        "Amount",
-        "Transaction Date",
+        "Payment Type*",
+        "Society Bank Name/Bank code(Given to you by nobrokerhood)*",
+        "Cheque/Ref No*",
+        "Tower No*",
+        "Flat No*",
+        "Bill Head*",
+        "Amount*",
+        "Transaction Date*",
         "Comments",
         "Meter No",
         "Cheque Issuer Bank",
@@ -546,7 +546,7 @@ def test_job_state_restores_after_restart_approval_and_download_use_drive_id():
 
     assert downloaded.status_code == 200
     assert drive1.uploads[0]["folder_id"] == "member-in"
-    assert wb.active["A1"].value == "Payment Type"
+    assert wb.active["A1"].value == "Payment Type*"
 
 
 def test_google_sheets_job_store_create_update_list_and_load_state():

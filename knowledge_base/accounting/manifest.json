@@ -1,0 +1,19 @@
+{
+  "name": "NoBrokerHood Accounting AI knowledge base",
+  "version": "1.0.0",
+  "updated": "2026-09-15",
+  "description": "Versioned accounting knowledge used by the local Accounting AI: document signatures, field vocabulary, GST/TDS reference data, society accounting concepts, validation rule catalog and company policies. Company-specific policies that are not defined in project requirements are marked POLICY_REQUIRED instead of being assumed.",
+  "files": [
+    "document_types.json",
+    "vocabulary.json",
+    "gst.json",
+    "tds.json",
+    "concepts.json",
+    "expense_categories.json",
+    "validation_rules.json",
+    "policies.json"
+  ],
+  "changelog": [
+    {"version": "1.0.0", "date": "2026-09-15", "change": "Initial knowledge base for local (no-Gemini) Accounting AI."}
+  ]
+}
