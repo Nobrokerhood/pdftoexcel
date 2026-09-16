@@ -47,6 +47,7 @@ def test_dev_login_disabled_when_environment_is_production():
         allow_dev_login=True,
         gemini_api_key="key",
         google_client_id="client",
+        session_secret="test-session-secret",
         google_service_account_json='{"client_email": "test@nobroker.in"}',
         google_accounting_spreadsheet_id="sheet-id",
     )
@@ -221,7 +222,6 @@ def test_production_config_validation_fails_fast_on_missing_keys():
     # In development mode, validation returns no errors
     dev_settings = Settings(
         google_client_id=None,
-        frontend_google_client_id=None,
         allowed_email_domain=None,
         allow_domain_wide_access=False,
         session_inactivity_seconds=1200,
@@ -254,7 +254,6 @@ def test_production_config_validation_fails_fast_on_missing_keys():
     # In production mode, missing mandatory keys produce explicit errors
     prod_settings = Settings(
         google_client_id=None,
-        frontend_google_client_id=None,
         allowed_email_domain=None,
         allow_domain_wide_access=False,
         session_inactivity_seconds=1200,
@@ -281,9 +280,11 @@ def test_production_config_validation_fails_fast_on_missing_keys():
         google_api_usage_sheet_name="Usage",
         cors_allowed_origins=("https://accounting.nobrokerhood.com",),
         environment="production",
+        session_secret=None,
     )
     errors = validate_production_config(prod_settings)
     assert len(errors) > 0
     assert any("GEMINI_API_KEY" in e for e in errors)
     assert any("GOOGLE_CLIENT_ID" in e for e in errors)
+    assert any("SESSION_SECRET" in e for e in errors)
     assert any("ALLOW_DEV_LOGIN" in e for e in errors)

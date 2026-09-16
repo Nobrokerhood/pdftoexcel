@@ -19,7 +19,6 @@ from app.google.sheets_service import GoogleSheetsService
 def settings() -> Settings:
     return Settings(
         google_client_id="client-id",
-        frontend_google_client_id="client-id",
         allowed_email_domain="nobroker.in",
         allow_domain_wide_access=False,
         session_inactivity_seconds=1200,
