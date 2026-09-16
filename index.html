@@ -99,15 +99,20 @@
     const BASE_URL = window.__API_BASE__ ||
       ((location.hostname === "localhost" || location.hostname === "127.0.0.1")
         ? "http://127.0.0.1:8030"
-        : "");
+        : (location.hostname.endsWith("github.io")
+            ? "https://pdftoexcel-846x.onrender.com"
+            : ""));
 
     async function loadPublicConfig() {
       try {
         const res = await fetch(BASE_URL + "/config/public");
-        if (!res.ok) throw new Error("Config unavailable");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Google OAuth client is not configured on the server.");
+        }
         return await res.json();
       } catch (error) {
-        return null;
+        return { error: error.message || "Google OAuth client is not configured on the server." };
       }
     }
 
@@ -174,7 +179,7 @@
         renderGoogleButton(config.google_client_id);
       } else {
         const status = document.getElementById("status");
-        status.textContent = "Google OAuth client is not configured on the server.";
+        status.textContent = (config && config.error) || "Google OAuth client is not configured on the server.";
         status.className = "status";
       }
     });

@@ -219,4 +219,29 @@ def create_app(
     def root():
         return {"message": "NoBrokerHood PDF to Excel & Split API running."}
 
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    root_dir = Path(__file__).resolve().parent.parent
+
+    for static_file in [
+        "index.html",
+        "accounting.html",
+        "ocr.html",
+        "voice.html",
+        "session_timeout.js",
+        "knowledge-bot-v2.js",
+        "test_launcher.html",
+    ]:
+        file_path = root_dir / static_file
+        if file_path.exists():
+            media_type = "text/html" if static_file.endswith(".html") else "application/javascript"
+
+            def make_handler(p, mt):
+                async def handler():
+                    return FileResponse(p, media_type=mt)
+                return handler
+
+            app.add_api_route(f"/{static_file}", make_handler(file_path, media_type), methods=["GET"], include_in_schema=False)
+
     return app

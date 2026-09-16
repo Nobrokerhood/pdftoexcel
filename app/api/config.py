@@ -14,9 +14,14 @@ router = APIRouter(prefix="/config", tags=["config"])
 @router.get("/public")
 async def public_config(request: Request):
     settings = request.app.state.settings
+    if not settings.google_client_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth client is not configured on the server.",
+        )
     return {
         "application_name": "Accounting AI",
-        "google_client_id": settings.frontend_google_client_id,
+        "google_client_id": settings.google_client_id,
         "allowed_email_domain": settings.allowed_email_domain,
         "features": {
             "member_receipt": True,
@@ -24,6 +29,13 @@ async def public_config(request: Request):
             "legacy_tools": True,
         },
     }
+
+
+@router.get("/diagnostic")
+async def config_diagnostic(request: Request):
+    from app.core.config import get_config_diagnostic
+
+    return get_config_diagnostic(request.app.state.settings)
 
 
 def require_admin(session):

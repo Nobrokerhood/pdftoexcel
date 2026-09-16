@@ -47,22 +47,33 @@ Ensure the following APIs are enabled in your Google Cloud Project:
 2. **Google Sheets API** (`sheets.googleapis.com`)
 3. **Generative Language API** (`generativelanguage.googleapis.com`) for Gemini 2.5 Flash
 
-### B. OAuth 2.0 Consent Screen & Client ID
-1. **User Type**: Select **Internal** (restricts authentication strictly to users within the `@nobroker.in` Google Workspace organization).
-   - *Workspace Admin Note*: Internal apps do not require Google verification or external audit.
-2. **Scopes**:
-   - `openid`
-   - `.../auth/userinfo.email`
-   - `.../auth/userinfo.profile`
-3. **OAuth 2.0 Web Client**:
-   - Create credentials of type **OAuth client ID** -> **Web application**.
-   - **Authorized JavaScript Origins**: Add your exact production and staging origins:
-     - `https://accounting.nobrokerhood.com` (Production)
-     - `https://staging-accounting.nobrokerhood.com` (Staging)
-     - `http://localhost:5000` / `http://127.0.0.1:5000` (Local Developer testing)
-   - **Authorized Redirect URIs**:
-     - *Not required*: The frontend uses **Google Identity Services (GIS)** ID-token flow (`window.google.accounts.id.initialize`), where tokens are received directly via JavaScript callback without redirecting.
-   - Set the resulting client ID to `GOOGLE_CLIENT_ID` in your `.env`.
+### B. Production Google OAuth Setup
+Follow these steps to configure Google OAuth for production:
+1. **Create/use Google OAuth Web Client**: In Google Cloud Console -> APIs & Services -> Credentials -> Create Credentials -> OAuth client ID -> Application type: **Web application**.
+2. **Copy OAuth Web Client ID**: It has the format `...apps.googleusercontent.com`.
+3. **Configure GOOGLE_CLIENT_ID on production server**: In Render Dashboard (or production environment): `Render Dashboard -> Service (pdftoexcel) -> Environment -> Add Environment Variable` -> Key: `GOOGLE_CLIENT_ID`, Value: `<OAuth Web Client ID>`.
+4. **Configure production frontend origin**: Under Authorized JavaScript Origins in Google Cloud Console, add:
+   - `https://nobrokerhood.github.io`
+   - `https://pdftoexcel-846x.onrender.com`
+   - Production domain (e.g., `https://accounting.nobrokerhood.com`)
+   - `http://localhost:5000` / `http://127.0.0.1:5000`
+5. **Configure redirect URI only if required**: None required. The frontend uses **Google Identity Services (GIS)** ID-token flow (`window.google.accounts.id.initialize`), receiving tokens via JavaScript callback without redirecting.
+6. **Configure Workspace access**: In Google Workspace Admin Console, ensure the OAuth app is authorized/internal for the organization.
+7. **Configure ALLOWED_EMAIL_DOMAIN=nobroker.in**: Set this environment variable so that only `@nobroker.in` Workspace identities can authenticate. Set `ALLOW_DOMAIN_WIDE_ACCESS=true` to permit all organization employees without individual pre-registration.
+8. **Deploy/restart backend**: Ensure backend service restarts with the new environment variables.
+9. **Verify /config/public**: Test `GET https://<api-url>/config/public` to ensure `google_client_id` is populated and no secrets are exposed.
+10. **Test Google login**: Open the production login page, click **Continue with Google**, authenticate with an authorized `@nobroker.in` account, and confirm access.
+
+> [!CAUTION]
+> **CRITICAL CREDENTIAL DISTINCTION**:
+> The service-account `client_id` is NOT the employee Google OAuth client ID.
+> 
+> The application uses three completely separate Google identity mechanisms:
+> - **Employee Google OAuth (`GOOGLE_CLIENT_ID`)**: Google Cloud OAuth 2.0 Web Client ID used strictly for employee browser login.
+> - **Backend Service Account (`GOOGLE_SERVICE_ACCOUNT_JSON` / `FILE`)**: Service Account JSON credentials used strictly for automated backend Google Drive and Google Sheets storage operations.
+> - **Gemini AI SDK (`GEMINI_API_KEY`)**: Google AI Studio / Vertex AI API key used strictly for multimodal financial document extraction and verification.
+> 
+> Never pass the service account client ID or credentials to `GOOGLE_CLIENT_ID` or frontend OAuth.
 
 ### C. Google Workspace User Authorization Model
 - The application enforces domain restriction at the backend level via `ALLOWED_EMAIL_DOMAIN=nobroker.in`.

@@ -14,7 +14,6 @@ from app.processing.stores import GoogleSheetsProcessingJobStore
 def settings(max_retries=2) -> Settings:
     return Settings(
         google_client_id="client-id",
-        frontend_google_client_id="client-id",
         allowed_email_domain="nobroker.in",
         allow_domain_wide_access=False,
         session_inactivity_seconds=1200,

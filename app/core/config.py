@@ -15,7 +15,6 @@ def _split_csv(value: str) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class Settings:
     google_client_id: str | None
-    frontend_google_client_id: str | None
     allowed_email_domain: str | None
     allow_domain_wide_access: bool
     session_inactivity_seconds: int
@@ -52,6 +51,7 @@ class Settings:
     log_level: str = "INFO"
     enable_docs: bool = True
     google_shared_drive_id: str | None = None
+    session_secret: str | None = None
 
 
 def _flag(value: str | None) -> bool:
@@ -73,10 +73,7 @@ def get_settings() -> Settings:
     configured_origins = os.getenv("CORS_ALLOWED_ORIGINS")
 
     return Settings(
-        google_client_id=os.getenv("GOOGLE_CLIENT_ID"),
-        frontend_google_client_id=os.getenv("VITE_GOOGLE_CLIENT_ID")
-        or os.getenv("GOOGLE_CLIENT_ID")
-        or "414963441128-69gsdlfdfn8hrf7ovgc9mfh10spnc5nq.apps.googleusercontent.com",
+        google_client_id=(os.getenv("GOOGLE_CLIENT_ID") or "").strip() or None,
         allowed_email_domain=os.getenv("ALLOWED_EMAIL_DOMAIN", "nobroker.in"),
         allow_domain_wide_access=_flag(os.getenv("ALLOW_DOMAIN_WIDE_ACCESS")),
         session_inactivity_seconds=int(os.getenv("SESSION_INACTIVITY_SECONDS", "1200")),
@@ -118,6 +115,7 @@ def get_settings() -> Settings:
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
         enable_docs=_flag(os.getenv("ENABLE_DOCS", "false" if os.getenv("ENVIRONMENT") == "production" else "true")),
         google_shared_drive_id=(os.getenv("GOOGLE_SHARED_DRIVE_ID") or "").strip() or None,
+        session_secret=(os.getenv("SESSION_SECRET") or "").strip() or None,
     )
 
 
@@ -138,10 +136,36 @@ def validate_production_config(settings: Settings) -> list[str]:
         errors.append("Google Service Account credentials (GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_FILE) are required in production.")
     if not settings.google_accounting_spreadsheet_id:
         errors.append("GOOGLE_ACCOUNTING_SPREADSHEET_ID is required in production.")
+    if not settings.session_secret:
+        errors.append("SESSION_SECRET is required in production.")
     if settings.allow_dev_login:
         errors.append("ALLOW_DEV_LOGIN must be false in production.")
     if any(origin.strip() == "*" for origin in settings.cors_allowed_origins):
         errors.append("CORS_ALLOWED_ORIGINS cannot contain '*' wildcard in production.")
 
     return errors
+
+
+def get_config_diagnostic(settings: Settings) -> dict[str, bool]:
+    """
+    Returns safe boolean configuration flags for production diagnostics.
+    Never exposes credentials or secrets.
+    """
+    client_id = (settings.google_client_id or "").strip()
+    return {
+        "google_client_id_configured": bool(client_id),
+        "google_client_id_format_valid": bool(client_id.endswith(".apps.googleusercontent.com")),
+        "google_client_secret_configured": bool(os.getenv("GOOGLE_CLIENT_SECRET")),
+        "gemini_configured": bool(settings.gemini_api_key),
+        "service_account_configured": bool(
+            settings.google_service_account_json or settings.google_service_account_file
+        ),
+        "shared_drive_configured": bool(
+            settings.google_shared_drive_id or settings.google_drive_root_folder_id
+        ),
+        "sheets_configured": bool(
+            settings.google_accounting_spreadsheet_id or settings.google_user_master_sheet_id
+        ),
+        "session_secret_configured": bool(settings.session_secret),
+    }
 
