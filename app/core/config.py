@@ -109,7 +109,11 @@ def get_settings() -> Settings:
         ),
         gemini_api_key_fallback=os.getenv("GEMINI_API_KEY_FALLBACK"),
         gemini_fallback_enabled=_flag(os.getenv("GEMINI_FALLBACK_ENABLED")),
-        poppler_path=(os.getenv("POPPLER_PATH") or "").strip() or None,
+        poppler_path=(
+            os.getenv("POPPLER_PATH").strip()
+            if os.getenv("POPPLER_PATH") and os.path.exists(os.getenv("POPPLER_PATH").strip())
+            else None
+        ),
         environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
         debug=_flag(os.getenv("DEBUG", "false")),
         log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper(),
