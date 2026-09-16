@@ -50,14 +50,95 @@ def detect_format(data: bytes) -> str:
     return "UNKNOWN"
 
 
-def load_page_images(data: bytes, poppler_path: str | None, dpi: int) -> list[Image.Image]:
+import logging
+import threading
+from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
+
+
+class PageImageCache:
+    """Bounded, thread-safe in-memory cache for rendered document page images.
+
+    Keyed strictly by (sha256, dpi) to guarantee that different documents never collide.
+    Bounded capacity (default max 16 entries) with automatic eviction prevents memory leaks.
+    """
+    def __init__(self, capacity: int = 16):
+        self._capacity = capacity
+        self._cache: OrderedDict[tuple[str, int], list[Image.Image]] = OrderedDict()
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, sha256: str, dpi: int) -> list[Image.Image] | None:
+        with self._lock:
+            key = (sha256, dpi)
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                self.hits += 1
+                logger.debug("PAGE_IMAGE_CACHE_HIT: sha256=%s, dpi=%d (total hits=%d)", sha256[:12], dpi, self.hits)
+                # Return independent copies so callers cannot mutate cached PIL objects
+                return [img.copy() for img in self._cache[key]]
+            self.misses += 1
+            logger.debug("PAGE_IMAGE_CACHE_MISS: sha256=%s, dpi=%d (total misses=%d)", sha256[:12], dpi, self.misses)
+            return None
+
+    def put(self, sha256: str, dpi: int, images: list[Image.Image]):
+        with self._lock:
+            key = (sha256, dpi)
+            self._cache[key] = [img.copy() for img in images]
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._capacity:
+                _, evicted_images = self._cache.popitem(last=False)
+                for img in evicted_images:
+                    try:
+                        img.close()
+                    except Exception:
+                        pass
+
+    def clear(self):
+        with self._lock:
+            for imgs in self._cache.values():
+                for img in imgs:
+                    try:
+                        img.close()
+                    except Exception:
+                        pass
+            self._cache.clear()
+            self.hits = 0
+            self.misses = 0
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
+
+_PAGE_IMAGE_CACHE = PageImageCache(capacity=16)
+
+
+def get_page_image_cache() -> PageImageCache:
+    return _PAGE_IMAGE_CACHE
+
+
+def load_page_images(data: bytes, poppler_path: str | None, dpi: int, use_cache: bool = True) -> list[Image.Image]:
     """Every page as an RGB image: all PDF pages via Poppler, or the single image."""
+    sha = sha256_hex(data) if (use_cache and len(data) > 0) else None
+    if sha and use_cache:
+        cached = _PAGE_IMAGE_CACHE.get(sha, dpi)
+        if cached is not None:
+            return cached
+
     if is_pdf(data):
-        return pdf_to_images(data, poppler_path, dpi=dpi)
-    try:
-        return [Image.open(io.BytesIO(data)).convert("RGB")]
-    except (UnidentifiedImageError, OSError) as exc:
-        raise InvalidImageError() from exc
+        images = pdf_to_images(data, poppler_path, dpi=dpi)
+    else:
+        try:
+            images = [Image.open(io.BytesIO(data)).convert("RGB")]
+        except (UnidentifiedImageError, OSError) as exc:
+            raise InvalidImageError() from exc
+
+    if sha and use_cache and images:
+        _PAGE_IMAGE_CACHE.put(sha, dpi, images)
+    return images
 
 
 def build_manifest(data: bytes, filename: str, content_type: str, poppler_path: str | None) -> DocumentManifest:

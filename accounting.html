@@ -556,6 +556,82 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
 
+    .badge.user-edited {
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      cursor: help;
+      margin-left: 4px;
+    }
+
+    .autocomplete-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 100;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      margin-top: 2px;
+    }
+
+    .autocomplete-item {
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .autocomplete-item:hover, .autocomplete-item.active {
+      background: #f0fdf4;
+      color: var(--primary-dark);
+    }
+
+    .autocomplete-item .count-tag {
+      font-size: 11px;
+      color: var(--muted);
+      background: #f1f5f9;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    .value-suggest-popover {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 90;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    table.sheet-grid td.selected-cell {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
     /* Action Bar (Sticky Bottom) */
     .action-bar {
       position: sticky;
@@ -827,7 +903,11 @@
                 <button class="filter-btn" id="filterAttention" onclick="setFilter('attention')">Needs Attention (<span id="countAttention">0</span>)</button>
                 <button class="filter-btn" id="filterVerified" onclick="setFilter('verified')">Verified (<span id="countVerified">0</span>)</button>
               </div>
-              <div style="display: flex; gap: 8px;">
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <span id="selectionCount" style="font-size: 12px; color: var(--muted); font-weight: 500;"></span>
+                <button class="secondary" id="undoBtn" style="min-height: 34px; font-size: 13px;" onclick="undo()" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+                <button class="secondary" id="redoBtn" style="min-height: 34px; font-size: 13px;" onclick="redo()" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" disabled>↷ Redo</button>
+                <button class="secondary" id="bulkEditBtn" style="min-height: 34px; font-size: 13px;" onclick="openBulkEditModal()">Bulk Edit...</button>
                 <button class="secondary" style="min-height: 34px; font-size: 13px;" onclick="toggleColumnVisibilityMenu()">Columns ▾</button>
                 <button class="secondary" style="min-height: 34px; font-size: 13px; color: var(--primary);" onclick="addNewRow()">+ Add Transaction</button>
               </div>
@@ -919,6 +999,70 @@
         </section>
       </div>
     </main>
+  </div>
+
+  <!-- MODAL: Bulk Edit with Exact Preview -->
+  <div id="modalBulkEdit" class="modal-backdrop hidden">
+    <div class="modal" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 16px;">Bulk Edit Transactions</h3>
+        <button class="secondary" style="min-height: 28px; padding: 0 8px;" onclick="closeModal('modalBulkEdit')">✕</button>
+      </div>
+
+      <div style="display: grid; gap: 12px; margin-bottom: 16px;">
+        <div class="field">
+          <label for="bulkEditColumn">Target Column</label>
+          <select id="bulkEditColumn" onchange="onBulkColumnChange()"></select>
+        </div>
+
+        <div class="field">
+          <label for="bulkEditScope">Rows to Update</label>
+          <select id="bulkEditScope" onchange="updateBulkPreview()">
+            <option value="selected">Selected rows only</option>
+            <option value="blank">All blank / unresolved rows (-)</option>
+            <option value="matching">All rows matching a specific value</option>
+            <option value="all">Entire column (all rows)</option>
+          </select>
+        </div>
+
+        <div class="field hidden" id="bulkMatchingRowField">
+          <label for="bulkMatchingValue">Match Current Value</label>
+          <input type="text" id="bulkMatchingValue" placeholder="Old value to replace..." oninput="updateBulkPreview()">
+        </div>
+
+        <div class="field">
+          <label for="bulkNewValue">New Value</label>
+          <div style="position: relative;">
+            <input type="text" id="bulkNewValue" placeholder="Enter new value..." oninput="updateBulkPreview()" autocomplete="off">
+            <div id="bulkAutocomplete" class="autocomplete-list hidden"></div>
+          </div>
+        </div>
+
+        <!-- Warning for Sensitive Accounting Fields -->
+        <div id="bulkSensitiveWarning" class="alert-banner warn hidden" style="margin-top: 4px; padding: 10px 14px;">
+          <span>⚠️</span>
+          <div>
+            <strong id="bulkSensitiveTitle">High Accounting Impact Field</strong>
+            <p id="bulkSensitiveText" style="margin: 4px 0 0; font-size: 12px;"></p>
+            <label style="display: flex; gap: 6px; align-items: center; margin-top: 8px; font-weight: 600; cursor: pointer;">
+              <input type="checkbox" id="bulkSensitiveConfirm" onchange="checkBulkApplyReady()"> I explicitly confirm altering this sensitive financial field
+            </label>
+          </div>
+        </div>
+
+        <!-- Exact Preview Box -->
+        <div style="background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 12px;">
+          <h4 style="margin: 0 0 6px; font-size: 13px; color: var(--text);">Preview of Changes:</h4>
+          <div id="bulkPreviewSummary" style="font-size: 13px; line-height: 1.5; color: #334155;"></div>
+          <div id="bulkPreviewRows" style="margin-top: 8px; font-size: 12px; color: var(--muted); max-height: 100px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" onclick="closeModal('modalBulkEdit')">Cancel</button>
+        <button class="primary" id="btnApplyBulk" onclick="applyBulkEdit()" disabled>Apply Changes</button>
+      </div>
+    </div>
   </div>
 
   <!-- MODAL: Delete Row Confirmation -->
@@ -1038,6 +1182,24 @@
     let pastJobs = [];
     let localSourceFileBlob = null;
     let localSourceFileUrl = null;
+    let selectedRowIds = new Set();
+    let activeCell = null;
+    let undoStack = [];
+    let redoStack = [];
+
+    const COLUMN_PRESETS = {
+      "Payment Type*": ["Cheque", "Cash", "NEFT", "RTGS", "UPI", "IMPS", "Online Transfer", "Direct Debit", "Debit Card", "Credit Card"],
+      "Bill Head*": ["Maintenance", "Water Charges", "Electricity Charges", "Club House", "Corpus Fund", "Sinking Fund", "Late Fee", "Interest", "Repair & Renovation", "Security Charges", "DG Charges", "Donation", "Transfer Fee", "Common Expenses"],
+      "Society Bank Name/Bank code(Given to you by nobrokerhood)*": ["ICICI Bank", "HDFC Bank", "State Bank of India", "Axis Bank", "Kotak Mahindra Bank", "IDFC FIRST Bank", "Punjab National Bank", "Petty Cash"],
+      "Tower No*": ["A", "B", "C", "D", "E", "1", "2", "3", "Block 1", "Tower A", "Tower B"],
+      "Cheque Issuer Bank": ["HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank", "Kotak Mahindra Bank", "Bank of Baroda", "Canara Bank", "Union Bank"]
+    };
+
+    const SENSITIVE_FINANCIAL_COLUMNS = new Set([
+      "Amount*",
+      "Transaction Date*",
+      "Cheque/Ref No*"
+    ]);
 
     // Initialize Column Visibility
     NBH_COLUMNS.forEach(c => columnVisibility[c] = true);
@@ -1144,7 +1306,21 @@
 
       const startBtn = document.getElementById("startBtn");
       startBtn.disabled = true;
-      setStatus("Processing document with Accounting AI...", true);
+
+      const truthfulStages = [
+        "Preparing document...",
+        "Reading document with OCR...",
+        "Understanding transactions with AI...",
+        "Verifying extracted data against source...",
+        "Checking accounting consistency and reconciliation...",
+        "Preparing human review..."
+      ];
+      let stageIdx = 0;
+      setStatus(truthfulStages[0], true);
+      const stageTimer = setInterval(() => {
+        stageIdx = (stageIdx + 1) % truthfulStages.length;
+        setStatus(truthfulStages[stageIdx], true);
+      }, 7000);
 
       const form = new FormData();
       form.append("purpose", purpose);
@@ -1164,6 +1340,7 @@
       } catch (err) {
         setStatus(err.message);
       } finally {
+        clearInterval(stageTimer);
         window.__ACCOUNTING_JOB_ACTIVE__ = false;
         startBtn.disabled = false;
       }
@@ -1201,17 +1378,36 @@
     }
 
     function renderJob(job) {
+      const prevJob = currentJob;
       currentJob = job;
+      selectedRowIds.clear();
+      updateSelectionUI();
+
       document.getElementById("sectionReview").classList.remove("hidden");
       document.getElementById("reviewDocSubtitle").textContent = `${job.source_filename || "Document"} | Job ID: ${job.job_id}`;
 
-      // Extract rows
+      // Extract rows and preserve user edits
       const targetData = job.mapping_result?.mapped_data || job.extracted_data || {};
       const rawRows = targetData.rows || [];
+      const oldRows = localRows;
+      const isSameJob = prevJob && prevJob.job_id === job.job_id;
+
       localRows = rawRows.map((r, i) => {
-        const normalized = { _internal_id: "row_" + i + "_" + Math.random().toString(36).substr(2, 6) };
+        const prevRow = (isSameJob && oldRows[i]) ? oldRows[i] : null;
+        const normalized = {
+          _internal_id: prevRow ? prevRow._internal_id : ("row_" + i + "_" + Math.random().toString(36).substr(2, 6))
+        };
         NBH_COLUMNS.forEach(col => {
-          normalized[col] = (r[col] === undefined || r[col] === null || String(r[col]).trim() === "") ? "-" : String(r[col]).trim();
+          const rawVal = (r[col] === undefined || r[col] === null || String(r[col]).trim() === "") ? "-" : String(r[col]).trim();
+          if (prevRow && prevRow["_edited_" + col]) {
+            // User edit has highest priority: never silently overwrite!
+            normalized[col] = prevRow[col];
+            normalized["_edited_" + col] = true;
+            normalized["_original_" + col] = prevRow["_original_" + col] || rawVal;
+          } else {
+            normalized[col] = rawVal;
+            normalized["_original_" + col] = rawVal;
+          }
         });
         return normalized;
       });
@@ -1433,22 +1629,12 @@
     }
 
     function filterAndRenderGrid() {
-      const query = (document.getElementById("gridSearch").value || "").toLowerCase().trim();
+      const query = (document.getElementById("gridSearch")?.value || "").toLowerCase().trim();
       const headerRow = document.getElementById("gridHeaderRow");
       const tbody = document.getElementById("gridBody");
 
-      // Render Header
-      let headHtml = `<th class="sticky-col">#</th><th>Status</th>`;
-      NBH_COLUMNS.forEach(col => {
-        if (columnVisibility[col]) {
-          headHtml += `<th onclick="sortGridBy('${escapeHtml(col)}')">${escapeHtml(COLUMN_SHORT_LABELS[col] || col)} ⇅</th>`;
-        }
-      });
-      headHtml += `<th style="text-align: center;">Actions</th>`;
-      headerRow.innerHTML = headHtml;
-
       // Filter rows
-      let visible = localRows.filter((r, idx) => {
+      const visible = localRows.filter((r) => {
         // Status filter
         const hasWarning = (r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn);
         if (activeFilter === "attention" && !hasWarning) return false;
@@ -1467,25 +1653,54 @@
       document.getElementById("countAttention").textContent = localRows.filter(r => r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn).length;
       document.getElementById("countVerified").textContent = localRows.length - parseInt(document.getElementById("countAttention").textContent);
 
+      // Render Header with Checkbox for select-all
+      const allSelected = visible.length > 0 && visible.every(r => selectedRowIds.has(r._internal_id));
+      let headHtml = `
+        <th style="width: 38px; text-align: center;">
+          <input type="checkbox" id="selectAllBox" ${allSelected ? "checked" : ""} onchange="toggleSelectAll(this.checked)" title="Select all visible">
+        </th>
+        <th class="sticky-col">#</th>
+        <th>Status</th>
+      `;
+      NBH_COLUMNS.forEach(col => {
+        if (columnVisibility[col]) {
+          headHtml += `<th onclick="sortGridBy('${escapeHtml(col)}')">${escapeHtml(COLUMN_SHORT_LABELS[col] || col)} ⇅</th>`;
+        }
+      });
+      headHtml += `<th style="text-align: center;">Actions</th>`;
+      headerRow.innerHTML = headHtml;
+
       if (!visible.length) {
-        tbody.innerHTML = `<tr><td colspan="${NBH_COLUMNS.length + 3}" style="text-align: center; color: var(--muted); padding: 32px;">No matching transactions found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${NBH_COLUMNS.length + 4}" style="text-align: center; color: var(--muted); padding: 32px;">No matching transactions found.</td></tr>`;
+        updateSelectionUI();
         return;
       }
 
-      tbody.innerHTML = visible.map((row, visualIdx) => {
+      tbody.innerHTML = visible.map((row) => {
         const actualIdx = localRows.findIndex(r => r._internal_id === row._internal_id);
         const hasWarn = (row["Amount*"] === "-" || row["Cheque/Ref No*"] === "-" || row._has_warn);
         const statusBadge = hasWarn ? `<span class="badge warn" title="Needs attention">⚠</span>` : `<span class="badge ok" title="Verified">✓</span>`;
+        const isSelected = selectedRowIds.has(row._internal_id);
 
-        let tr = `<tr><td class="sticky-col">${actualIdx + 1}</td><td style="text-align: center;">${statusBadge}</td>`;
+        let tr = `<tr>
+          <td style="text-align: center;">
+            <input type="checkbox" class="row-select-checkbox" data-id="${row._internal_id}" ${isSelected ? "checked" : ""} onchange="toggleRowSelect('${row._internal_id}', this.checked)">
+          </td>
+          <td class="sticky-col">${actualIdx + 1}</td>
+          <td style="text-align: center;">${statusBadge}</td>
+        `;
 
         NBH_COLUMNS.forEach(col => {
           if (columnVisibility[col]) {
             const val = row[col] ?? "-";
-            const isEdited = row["_edited_" + col];
-            tr += `<td onclick="startInlineEdit(event, '${row._internal_id}', '${escapeHtml(col)}')">
+            const isEdited = !!row["_edited_" + col];
+            const origVal = row["_original_" + col] || val;
+            const isCellActive = activeCell && activeCell.rowId === row._internal_id && activeCell.col === col;
+
+            tr += `<td class="${isCellActive ? 'selected-cell' : ''}" data-row-id="${row._internal_id}" data-col="${escapeHtml(col)}" onclick="onCellClick(event, '${row._internal_id}', '${escapeHtml(col)}')" ondblclick="startInlineEdit(event, '${row._internal_id}', '${escapeHtml(col)}')">
               <div class="cell-view ${isEdited ? 'edited' : ''}">
                 <span>${escapeHtml(val)}</span>
+                ${isEdited ? `<span class="badge user-edited" title="Original: ${escapeHtml(origVal)}&#10;User changed to: ${escapeHtml(val)}">Edited</span>` : ''}
               </div>
             </td>`;
           }
@@ -1497,26 +1712,193 @@
         </td></tr>`;
         return tr;
       }).join("");
+
+      updateSelectionUI();
+    }
+
+    function onCellClick(e, rowId, col) {
+      if (e.target.tagName === "INPUT" || e.target.closest(".autocomplete-item") || e.target.closest(".value-suggest-popover")) return;
+      activeCell = { rowId, col };
+      document.querySelectorAll("table.sheet-grid td.selected-cell").forEach(td => td.classList.remove("selected-cell"));
+      const td = e.currentTarget;
+      if (td) td.classList.add("selected-cell");
+    }
+
+    function toggleSelectAll(checked) {
+      const visibleIds = getVisibleRowIds();
+      if (checked) {
+        visibleIds.forEach(id => selectedRowIds.add(id));
+      } else {
+        visibleIds.forEach(id => selectedRowIds.delete(id));
+      }
+      updateSelectionUI();
+    }
+
+    function toggleRowSelect(rowId, checked) {
+      if (checked) {
+        selectedRowIds.add(rowId);
+      } else {
+        selectedRowIds.delete(rowId);
+      }
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      const count = selectedRowIds.size;
+      const countEl = document.getElementById("selectionCount");
+      const bulkBtn = document.getElementById("bulkEditBtn");
+      if (countEl) countEl.textContent = count ? `${count} row${count > 1 ? 's' : ''} selected` : "";
+      if (bulkBtn) bulkBtn.textContent = count ? `Bulk Edit (${count})...` : "Bulk Edit...";
+
+      const selectAllBox = document.getElementById("selectAllBox");
+      if (selectAllBox) {
+        const visibleIds = getVisibleRowIds();
+        selectAllBox.checked = visibleIds.length > 0 && visibleIds.every(id => selectedRowIds.has(id));
+      }
+    }
+
+    function getVisibleRowIds() {
+      const query = (document.getElementById("gridSearch")?.value || "").toLowerCase().trim();
+      return localRows.filter(r => {
+        const hasWarning = (r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn);
+        if (activeFilter === "attention" && !hasWarning) return false;
+        if (activeFilter === "verified" && hasWarning) return false;
+        if (query) {
+          const match = Object.values(r).some(val => String(val).toLowerCase().includes(query));
+          if (!match) return false;
+        }
+        return true;
+      }).map(r => r._internal_id);
     }
 
     function startInlineEdit(e, rowId, col) {
-      const td = e.currentTarget;
-      if (td.querySelector("input")) return; // already editing
+      const td = e.currentTarget || e.target.closest("td");
+      if (!td || td.querySelector("input.cell-input")) return;
 
       const row = localRows.find(r => r._internal_id === rowId);
       if (!row) return;
 
+      activeCell = { rowId, col };
       const currentVal = row[col] === "-" ? "" : row[col];
-      td.innerHTML = `<input type="text" class="cell-input" value="${escapeHtml(currentVal)}">`;
-      const input = td.querySelector("input");
+      const oldVal = row[col];
+      const wasEdited = !!row["_edited_" + col];
+      const origVal = row["_original_" + col] || oldVal;
+
+      // Harvest trustworthy suggestions:
+      // 1. Current document non-blank values
+      const existingCounts = {};
+      localRows.forEach(r => {
+        const v = r[col];
+        if (v && v !== "-" && v.trim()) existingCounts[v.trim()] = (existingCounts[v.trim()] || 0) + 1;
+      });
+      // 2. Preset standards
+      (COLUMN_PRESETS[col] || []).forEach(p => { if (!existingCounts[p]) existingCounts[p] = 0; });
+      const suggestions = Object.keys(existingCounts).sort((a, b) => (existingCounts[b] || 0) - (existingCounts[a] || 0));
+
+      td.style.position = "relative";
+      td.innerHTML = `
+        <input type="text" class="cell-input" value="${escapeHtml(currentVal)}" autocomplete="off">
+        <div class="autocomplete-list hidden" id="cellAutocomplete"></div>
+        <div class="value-suggest-popover hidden" id="cellSuggestPopover"></div>
+      `;
+
+      const input = td.querySelector("input.cell-input");
+      const autoList = td.querySelector("#cellAutocomplete");
+      const popover = td.querySelector("#cellSuggestPopover");
+
       input.focus();
       input.select();
 
-      function commit() {
-        const newVal = input.value.trim() || "-";
-        if (newVal !== row[col]) {
+      let committed = false;
+
+      function showSuggestions(filterText = "") {
+        const query = filterText.toLowerCase().trim();
+        const matches = suggestions.filter(s => !query || s.toLowerCase().includes(query));
+        if (!matches.length || (matches.length === 1 && matches[0].toLowerCase() === query)) {
+          autoList.classList.add("hidden");
+          return;
+        }
+        autoList.innerHTML = matches.slice(0, 8).map(s => {
+          const count = existingCounts[s];
+          const countBadge = count > 0 ? `<span class="count-tag">${count}x</span>` : "";
+          return `<div class="autocomplete-item" data-val="${escapeHtml(s)}"><span>${escapeHtml(s)}</span>${countBadge}</div>`;
+        }).join("");
+        autoList.classList.remove("hidden");
+
+        autoList.querySelectorAll(".autocomplete-item").forEach(item => {
+          item.onmousedown = (ev) => {
+            ev.preventDefault();
+            const val = item.getAttribute("data-val");
+            input.value = val;
+            autoList.classList.add("hidden");
+            commit(val);
+          };
+        });
+      }
+
+      function checkReuse(val) {
+        const count = existingCounts[val];
+        if (count && count > 1 && val !== currentVal) {
+          const blanks = countBlankRows(col);
+          popover.innerHTML = `
+            <span><strong>${escapeHtml(val)}</strong> is used in ${count} rows.</span>
+            ${blanks > 0 ? `<button type="button" class="secondary" style="min-height: 22px; padding: 0 6px; font-size: 11px;" id="btnReuseBlank">Fill ${blanks} Blank Rows</button>` : ''}
+            <button type="button" class="secondary" style="min-height: 22px; padding: 0 6px; font-size: 11px;" id="btnReuseBulk">Bulk Edit...</button>
+          `;
+          popover.classList.remove("hidden");
+          const btnBlank = popover.querySelector("#btnReuseBlank");
+          if (btnBlank) {
+            btnBlank.onmousedown = (ev) => {
+              ev.preventDefault();
+              applyFillBlank(col, val);
+            };
+          }
+          const btnBulk = popover.querySelector("#btnReuseBulk");
+          if (btnBulk) {
+            btnBulk.onmousedown = (ev) => {
+              ev.preventDefault();
+              openBulkEditModal(col, val);
+            };
+          }
+        } else {
+          popover.classList.add("hidden");
+        }
+      }
+
+      showSuggestions(input.value);
+      checkReuse(input.value.trim());
+
+      input.addEventListener("input", () => {
+        showSuggestions(input.value);
+        checkReuse(input.value.trim());
+      });
+
+      function commit(overrideVal = null) {
+        if (committed) return;
+        committed = true;
+
+        let newVal = (overrideVal !== null ? overrideVal : input.value).trim();
+        if (!newVal) newVal = "-";
+
+        // Validate Amount
+        if (col === "Amount*" && newVal !== "-") {
+          const cleaned = newVal.replace(/[₹$,]/g, "").trim();
+          if (isNaN(parseFloat(cleaned)) || !isFinite(cleaned)) {
+            alert("Invalid Amount: '" + newVal + "'. Please enter a valid numeric value.");
+            filterAndRenderGrid();
+            return;
+          }
+          newVal = cleaned;
+        }
+
+        if (newVal !== oldVal) {
+          pushUndo({
+            type: "edit",
+            rows: [{ id: row._internal_id, col, oldVal, newVal, wasEdited }]
+          });
           row[col] = newVal;
           row["_edited_" + col] = true;
+          row["_original_" + col] = origVal;
           updateUnsavedCounter();
         }
         filterAndRenderGrid();
@@ -1525,15 +1907,381 @@
       input.addEventListener("keydown", ev => {
         if (ev.key === "Enter") {
           commit();
+          moveCellFocus(rowId, col, 1, 0);
         } else if (ev.key === "Escape") {
+          committed = true;
           filterAndRenderGrid();
         } else if (ev.key === "Tab") {
           ev.preventDefault();
           commit();
+          moveCellFocus(rowId, col, 0, ev.shiftKey ? -1 : 1);
         }
       });
-      input.addEventListener("blur", commit);
+
+      input.addEventListener("blur", () => {
+        setTimeout(() => commit(), 150);
+      });
     }
+
+    function moveCellFocus(currentRowId, currentCol, deltaRow, deltaCol) {
+      const visibleIds = getVisibleRowIds();
+      const currentIdx = visibleIds.indexOf(currentRowId);
+      if (currentIdx === -1) return;
+
+      const targetRowIdx = currentIdx + deltaRow;
+      if (targetRowIdx < 0 || targetRowIdx >= visibleIds.length) return;
+      const targetRowId = visibleIds[targetRowIdx];
+
+      const visibleCols = NBH_COLUMNS.filter(c => columnVisibility[c]);
+      const currentColIdx = visibleCols.indexOf(currentCol);
+      if (currentColIdx === -1) return;
+
+      let targetColIdx = currentColIdx + deltaCol;
+      if (targetColIdx < 0) targetColIdx = 0;
+      if (targetColIdx >= visibleCols.length) targetColIdx = visibleCols.length - 1;
+      const targetCol = visibleCols[targetColIdx];
+
+      const targetTd = document.querySelector(`td[data-row-id="${targetRowId}"][data-col="${targetCol}"]`);
+      if (targetTd) {
+        targetTd.click();
+        startInlineEdit({ currentTarget: targetTd }, targetRowId, targetCol);
+      }
+    }
+
+    function pushUndo(action) {
+      undoStack.push(action);
+      redoStack = [];
+      updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+      const uBtn = document.getElementById("undoBtn");
+      const rBtn = document.getElementById("redoBtn");
+      if (uBtn) uBtn.disabled = undoStack.length === 0;
+      if (rBtn) rBtn.disabled = redoStack.length === 0;
+    }
+
+    function undo() {
+      if (!undoStack.length) return;
+      const action = undoStack.pop();
+      if (action.type === "edit") {
+        action.rows.forEach(item => {
+          const row = localRows.find(r => r._internal_id === item.id);
+          if (row) {
+            row[item.col] = item.oldVal;
+            row["_edited_" + item.col] = item.wasEdited;
+          }
+        });
+        redoStack.push(action);
+      } else if (action.type === "delete") {
+        localRows.splice(action.index, 0, action.row);
+        redoStack.push(action);
+      } else if (action.type === "add") {
+        const idx = localRows.findIndex(r => r._internal_id === action.row._internal_id);
+        if (idx !== -1) localRows.splice(idx, 1);
+        redoStack.push(action);
+      }
+      updateUndoRedoButtons();
+      updateUnsavedCounter();
+      filterAndRenderGrid();
+    }
+
+    function redo() {
+      if (!redoStack.length) return;
+      const action = redoStack.pop();
+      if (action.type === "edit") {
+        action.rows.forEach(item => {
+          const row = localRows.find(r => r._internal_id === item.id);
+          if (row) {
+            row[item.col] = item.newVal;
+            row["_edited_" + item.col] = true;
+          }
+        });
+        undoStack.push(action);
+      } else if (action.type === "delete") {
+        const idx = localRows.findIndex(r => r._internal_id === action.row._internal_id);
+        if (idx !== -1) localRows.splice(idx, 1);
+        undoStack.push(action);
+      } else if (action.type === "add") {
+        localRows.push(action.row);
+        undoStack.push(action);
+      }
+      updateUndoRedoButtons();
+      updateUnsavedCounter();
+      filterAndRenderGrid();
+    }
+
+    function openBulkEditModal(defaultCol = null, defaultVal = null) {
+      const colSelect = document.getElementById("bulkEditColumn");
+      colSelect.innerHTML = NBH_COLUMNS.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(COLUMN_SHORT_LABELS[c] || c)}</option>`).join("");
+      if (defaultCol) colSelect.value = defaultCol;
+
+      const scopeSelect = document.getElementById("bulkEditScope");
+      if (selectedRowIds.size > 0) {
+        scopeSelect.value = "selected";
+      } else {
+        scopeSelect.value = "blank";
+      }
+
+      const valInput = document.getElementById("bulkNewValue");
+      valInput.value = defaultVal || "";
+
+      onBulkColumnChange();
+      openModal("modalBulkEdit");
+      updateBulkPreview();
+    }
+
+    function onBulkColumnChange() {
+      const col = document.getElementById("bulkEditColumn").value;
+      const isSensitive = SENSITIVE_FINANCIAL_COLUMNS.has(col);
+      const warnBox = document.getElementById("bulkSensitiveWarning");
+      const warnTitle = document.getElementById("bulkSensitiveTitle");
+      const warnText = document.getElementById("bulkSensitiveText");
+      const confirmCb = document.getElementById("bulkSensitiveConfirm");
+
+      confirmCb.checked = false;
+      if (isSensitive) {
+        warnBox.classList.remove("hidden");
+        warnTitle.textContent = `High Accounting Impact: ${COLUMN_SHORT_LABELS[col] || col}`;
+        warnText.textContent = `Bulk modifying ${COLUMN_SHORT_LABELS[col] || col} across multiple rows directly impacts primary accounting balances and reconciliation.`;
+      } else {
+        warnBox.classList.add("hidden");
+      }
+
+      setupBulkAutocomplete(col);
+      updateBulkPreview();
+    }
+
+    function setupBulkAutocomplete(col) {
+      const input = document.getElementById("bulkNewValue");
+      const list = document.getElementById("bulkAutocomplete");
+
+      const existingCounts = {};
+      localRows.forEach(r => {
+        const v = r[col];
+        if (v && v !== "-" && v.trim()) existingCounts[v.trim()] = (existingCounts[v.trim()] || 0) + 1;
+      });
+      (COLUMN_PRESETS[col] || []).forEach(p => { if (!existingCounts[p]) existingCounts[p] = 0; });
+      const suggestions = Object.keys(existingCounts).sort((a, b) => (existingCounts[b] || 0) - (existingCounts[a] || 0));
+
+      input.onfocus = () => renderBulkSuggestions(input.value);
+      input.oninput = () => {
+        renderBulkSuggestions(input.value);
+        updateBulkPreview();
+      };
+
+      function renderBulkSuggestions(query = "") {
+        const q = query.toLowerCase().trim();
+        const matches = suggestions.filter(s => !q || s.toLowerCase().includes(q));
+        if (!matches.length) {
+          list.classList.add("hidden");
+          return;
+        }
+        list.innerHTML = matches.slice(0, 8).map(s => {
+          const count = existingCounts[s];
+          const countBadge = count > 0 ? `<span class="count-tag">${count}x in doc</span>` : "";
+          return `<div class="autocomplete-item" data-val="${escapeHtml(s)}"><span>${escapeHtml(s)}</span>${countBadge}</div>`;
+        }).join("");
+        list.classList.remove("hidden");
+
+        list.querySelectorAll(".autocomplete-item").forEach(item => {
+          item.onmousedown = (ev) => {
+            ev.preventDefault();
+            input.value = item.getAttribute("data-val");
+            list.classList.add("hidden");
+            updateBulkPreview();
+          };
+        });
+      }
+
+      input.onblur = () => {
+        setTimeout(() => list.classList.add("hidden"), 150);
+      };
+    }
+
+    function updateBulkPreview() {
+      const col = document.getElementById("bulkEditColumn").value;
+      const scope = document.getElementById("bulkEditScope").value;
+      const matchValInput = document.getElementById("bulkMatchingValue");
+      const matchField = document.getElementById("bulkMatchingRowField");
+      const newVal = (document.getElementById("bulkNewValue").value || "").trim() || "-";
+
+      matchField.classList.toggle("hidden", scope !== "matching");
+
+      let affected = [];
+      let oldDescription = "";
+
+      if (scope === "selected") {
+        affected = localRows.filter(r => selectedRowIds.has(r._internal_id));
+        oldDescription = "selected rows";
+      } else if (scope === "blank") {
+        affected = localRows.filter(r => r[col] === "-" || !r[col] || r[col].trim() === "");
+        oldDescription = "- (blank/unresolved)";
+      } else if (scope === "matching") {
+        const targetOld = matchValInput.value.trim();
+        affected = localRows.filter(r => (r[col] || "").trim().toLowerCase() === targetOld.toLowerCase());
+        oldDescription = targetOld ? `"${targetOld}"` : "(matching value)";
+      } else if (scope === "all") {
+        affected = [...localRows];
+        oldDescription = "all rows";
+      }
+
+      const summaryEl = document.getElementById("bulkPreviewSummary");
+      const rowsEl = document.getElementById("bulkPreviewRows");
+      const applyBtn = document.getElementById("btnApplyBulk");
+
+      const affectedIndices = affected.map(row => localRows.findIndex(r => r._internal_id === row._internal_id) + 1);
+
+      if (affected.length === 0) {
+        summaryEl.innerHTML = `<span style="color: var(--muted);">No rows match the selected scope.</span>`;
+        rowsEl.textContent = "";
+        applyBtn.disabled = true;
+        applyBtn.textContent = "Apply Changes (0 rows)";
+        return;
+      }
+
+      summaryEl.innerHTML = `
+        You are about to update <strong>${affected.length} row${affected.length > 1 ? 's' : ''}</strong>.<br>
+        <strong>Column:</strong> ${escapeHtml(COLUMN_SHORT_LABELS[col] || col)}<br>
+        <strong>Change:</strong> <code>${escapeHtml(oldDescription)}</code> → <code>${escapeHtml(newVal)}</code>
+      `;
+      rowsEl.innerHTML = `<strong>Affected Row Numbers:</strong> ${affectedIndices.map(n => `#${n}`).join(", ")}`;
+
+      const isSensitive = SENSITIVE_FINANCIAL_COLUMNS.has(col);
+      const confirmCb = document.getElementById("bulkSensitiveConfirm");
+      const canApply = !isSensitive || (confirmCb && confirmCb.checked);
+
+      applyBtn.disabled = !canApply;
+      applyBtn.textContent = `Apply to ${affected.length} row${affected.length > 1 ? 's' : ''}`;
+    }
+
+    function checkBulkApplyReady() {
+      updateBulkPreview();
+    }
+
+    function applyBulkEdit() {
+      const col = document.getElementById("bulkEditColumn").value;
+      const scope = document.getElementById("bulkEditScope").value;
+      const matchValInput = document.getElementById("bulkMatchingValue");
+      let newVal = (document.getElementById("bulkNewValue").value || "").trim() || "-";
+
+      // Validate Amount if sensitive
+      if (col === "Amount*" && newVal !== "-") {
+        const cleaned = newVal.replace(/[₹$,]/g, "").trim();
+        if (isNaN(parseFloat(cleaned)) || !isFinite(cleaned)) {
+          alert("Invalid Amount: '" + newVal + "'. Please enter a valid number.");
+          return;
+        }
+        newVal = cleaned;
+      }
+
+      let affected = [];
+      if (scope === "selected") {
+        affected = localRows.filter(r => selectedRowIds.has(r._internal_id));
+      } else if (scope === "blank") {
+        // Strict safety: ONLY blank/dash rows are touched!
+        affected = localRows.filter(r => r[col] === "-" || !r[col] || r[col].trim() === "");
+      } else if (scope === "matching") {
+        const targetOld = matchValInput.value.trim().toLowerCase();
+        affected = localRows.filter(r => (r[col] || "").trim().toLowerCase() === targetOld);
+      } else if (scope === "all") {
+        affected = [...localRows];
+      }
+
+      if (!affected.length) return;
+
+      const changes = [];
+      affected.forEach(row => {
+        changes.push({
+          id: row._internal_id,
+          col: col,
+          oldVal: row[col],
+          newVal: newVal,
+          wasEdited: !!row["_edited_" + col]
+        });
+        row["_original_" + col] = row["_original_" + col] || row[col];
+        row[col] = newVal;
+        row["_edited_" + col] = true;
+      });
+
+      pushUndo({ type: "edit", rows: changes });
+      updateUnsavedCounter();
+      closeModal("modalBulkEdit");
+      filterAndRenderGrid();
+    }
+
+    function countBlankRows(col) {
+      return localRows.filter(r => r[col] === "-" || !r[col] || r[col].trim() === "").length;
+    }
+
+    function applyFillBlank(col, val) {
+      const blanks = localRows.filter(r => r[col] === "-" || !r[col] || r[col].trim() === "");
+      if (!blanks.length) {
+        alert("No blank rows found for " + (COLUMN_SHORT_LABELS[col] || col));
+        return;
+      }
+      const changes = [];
+      blanks.forEach(row => {
+        changes.push({
+          id: row._internal_id,
+          col: col,
+          oldVal: row[col],
+          newVal: val,
+          wasEdited: !!row["_edited_" + col]
+        });
+        row["_original_" + col] = row["_original_" + col] || row[col];
+        row[col] = val;
+        row["_edited_" + col] = true;
+      });
+      pushUndo({ type: "edit", rows: changes });
+      updateUnsavedCounter();
+      filterAndRenderGrid();
+    }
+
+    // Keyboard Shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+D, Ctrl+C, Ctrl+V)
+    document.addEventListener("keydown", ev => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const ctrl = isMac ? ev.metaKey : ev.ctrlKey;
+
+      // Global Undo: Ctrl+Z
+      if (ctrl && !ev.shiftKey && (ev.key === "z" || ev.key === "Z")) {
+        if (!document.activeElement?.classList.contains("cell-input")) {
+          ev.preventDefault();
+          undo();
+        }
+      }
+      // Global Redo: Ctrl+Y or Ctrl+Shift+Z
+      else if ((ctrl && (ev.key === "y" || ev.key === "Y")) || (ctrl && ev.shiftKey && (ev.key === "z" || ev.key === "Z"))) {
+        if (!document.activeElement?.classList.contains("cell-input")) {
+          ev.preventDefault();
+          redo();
+        }
+      }
+      // Fill Down: Ctrl+D
+      else if (ctrl && (ev.key === "d" || ev.key === "D")) {
+        if (activeCell && !document.activeElement?.classList.contains("cell-input")) {
+          ev.preventDefault();
+          const { rowId, col } = activeCell;
+          const currentIdx = localRows.findIndex(r => r._internal_id === rowId);
+          if (currentIdx > 0) {
+            const aboveVal = localRows[currentIdx - 1][col];
+            const targetRow = localRows[currentIdx];
+            const oldVal = targetRow[col];
+            if (oldVal !== aboveVal) {
+              pushUndo({
+                type: "edit",
+                rows: [{ id: rowId, col, oldVal, newVal: aboveVal, wasEdited: !!targetRow["_edited_" + col] }]
+              });
+              targetRow["_original_" + col] = targetRow["_original_" + col] || oldVal;
+              targetRow[col] = aboveVal;
+              targetRow["_edited_" + col] = true;
+              updateUnsavedCounter();
+              filterAndRenderGrid();
+            }
+          }
+        }
+      }
+    });
 
     function addNewRow() {
       const newId = "row_" + localRows.length + "_" + Math.random().toString(36).substr(2, 6);

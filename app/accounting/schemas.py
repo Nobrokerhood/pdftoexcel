@@ -19,7 +19,7 @@ def _normalize_amount(value: Any) -> Any:
     if not isinstance(value, str):
         return value
     cleaned = _CURRENCY.sub("", value).replace(" ", "").strip()
-    if cleaned == "":
+    if cleaned in {"", "-", "--", "N/A", "NA", "null", "None"}:
         return None
     return cleaned.replace(",", "") if _GROUPED_NUMBER.fullmatch(cleaned) else value
 

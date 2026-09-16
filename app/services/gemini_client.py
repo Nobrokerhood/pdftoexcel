@@ -1,6 +1,7 @@
 import logging
 import json
 import time
+import threading
 from typing import Any, Callable, TypeVar
 
 from google import genai
@@ -164,6 +165,8 @@ class GeminiDocumentClient:
         self._fallback_client = None
         self._clock = clock
         self._primary_capped_until = 0.0
+        self.call_history: list[dict] = []
+        self._history_lock = threading.Lock()
 
     def _get_client(self):
         if self._client is not None:
@@ -256,19 +259,55 @@ class GeminiDocumentClient:
                 time.sleep(RETRY_DELAY_SECONDS)
         raise ValueError("retries must be at least 1.")
 
-    def generate_content(self, prompt_parts: list[Any], retries: int = 2):
-        return self._request(
-            lambda client: client.models.generate_content(
-                model=self.settings.gemini_model,
-                contents=prompt_parts,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+    def generate_content(self, prompt_parts: list[Any], retries: int = 2, purpose: str = "content"):
+        start_t = time.perf_counter()
+        image_count = sum(1 for p in prompt_parts if hasattr(p, "mode") or hasattr(p, "size"))
+        text_chars = sum(len(p) for p in prompt_parts if isinstance(p, str))
+        try:
+            result = self._request(
+                lambda client: client.models.generate_content(
+                    model=self.settings.gemini_model,
+                    contents=prompt_parts,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    ),
                 ),
-            ),
-            retries,
-        )
+                retries,
+            )
+            duration = round(time.perf_counter() - start_t, 3)
+            with self._history_lock:
+                self.call_history.append({
+                    "purpose": purpose,
+                    "model": self.settings.gemini_model,
+                    "parts_count": len(prompt_parts),
+                    "image_count": image_count,
+                    "text_chars": text_chars,
+                    "duration_seconds": duration,
+                    "status": "SUCCESS",
+                })
+            logger.info("GEMINI_CALL_COMPLETED [purpose=%s, model=%s, images=%d, chars=%d, duration=%.3fs]",
+                        purpose, self.settings.gemini_model, image_count, text_chars, duration)
+            return result
+        except Exception as exc:
+            duration = round(time.perf_counter() - start_t, 3)
+            with self._history_lock:
+                self.call_history.append({
+                    "purpose": purpose,
+                    "model": self.settings.gemini_model,
+                    "parts_count": len(prompt_parts),
+                    "image_count": image_count,
+                    "text_chars": text_chars,
+                    "duration_seconds": duration,
+                    "status": "FAILED",
+                    "error": type(exc).__name__,
+                })
+            raise
 
-    def generate_json(self, prompt_parts: list[Any], retries: int = 2):
+    def generate_json(self, prompt_parts: list[Any], retries: int = 2, purpose: str = "json"):
+        start_t = time.perf_counter()
+        image_count = sum(1 for p in prompt_parts if hasattr(p, "mode") or hasattr(p, "size"))
+        text_chars = sum(len(p) for p in prompt_parts if isinstance(p, str))
+
         def request(client):
             response = client.models.generate_content(
                 model=self.settings.gemini_model,
@@ -285,4 +324,33 @@ class GeminiDocumentClient:
                 cleaned = text.replace("```json", "").replace("```", "").strip()
                 return json.loads(cleaned)
 
-        return self._request(request, retries)
+        try:
+            result = self._request(request, retries)
+            duration = round(time.perf_counter() - start_t, 3)
+            with self._history_lock:
+                self.call_history.append({
+                    "purpose": purpose,
+                    "model": self.settings.gemini_model,
+                    "parts_count": len(prompt_parts),
+                    "image_count": image_count,
+                    "text_chars": text_chars,
+                    "duration_seconds": duration,
+                    "status": "SUCCESS",
+                })
+            logger.info("GEMINI_CALL_COMPLETED [purpose=%s, model=%s, images=%d, chars=%d, duration=%.3fs]",
+                        purpose, self.settings.gemini_model, image_count, text_chars, duration)
+            return result
+        except Exception as exc:
+            duration = round(time.perf_counter() - start_t, 3)
+            with self._history_lock:
+                self.call_history.append({
+                    "purpose": purpose,
+                    "model": self.settings.gemini_model,
+                    "parts_count": len(prompt_parts),
+                    "image_count": image_count,
+                    "text_chars": text_chars,
+                    "duration_seconds": duration,
+                    "status": "FAILED",
+                    "error": type(exc).__name__,
+                })
+            raise
