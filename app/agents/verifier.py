@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.accounting.purposes import MEMBER_RECEIPT
 from app.accounting.schemas import VerificationResult
