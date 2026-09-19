@@ -187,8 +187,16 @@ def collect_capabilities(settings, live_gemini: bool = False, ocr_service=None, 
                                   "; ".join(profile["reasons"]) or "disabled by OCR_ENSEMBLE=off")
     else:
         paddle = _probe_engine(engines["paddleocr"], "paddleocr") if "paddleocr" in engines else probe_paddleocr()
+    if profile["below_minimum"]:
+        # Loading an OCR model here would OOM-kill this instance (measured in production).
+        note = (f"not probed: container memory {profile['memory_limit_mb']} MB is below the "
+                f"measured OCR minimum (RapidOCR-only needs >= 1024 MB)")
+        rapid = CapabilityStatus("rapidocr", UNAVAILABLE, note)
+        paddle = CapabilityStatus("paddleocr", UNAVAILABLE, note)
+    else:
+        rapid = _probe_engine(engines["rapidocr"], "rapidocr") if "rapidocr" in engines else probe_rapidocr()
     probes = [
-        _probe_engine(engines["rapidocr"], "rapidocr") if "rapidocr" in engines else probe_rapidocr(),
+        rapid,
         paddle,
         probe_pdf_renderer(getattr(settings, "poppler_path", None)),
         probe_image_processing(),

@@ -214,6 +214,13 @@ async def validate_config(data: ValidateProcessingRequest, request: Request, ses
 async def create_processing_job(request: Request, purpose: str = Form(...), file: UploadFile = File(...),
                                 session=Depends(require_session)):
     state = request.app.state
+    from app.core.resources import ocr_profile
+    profile = ocr_profile()
+    if profile["below_minimum"]:
+        # Refuse up front rather than be OOM-killed mid-job (measured: OCR needs > 512 MB).
+        raise HTTPException(status_code=503, detail=(
+            f"This server instance has {profile['memory_limit_mb']} MB of memory; document OCR needs at least "
+            f"1024 MB. Processing is disabled until the instance is upgraded."))
     raw_filename = file.filename or "upload.pdf"
     base_name = os.path.basename(raw_filename.replace("\\", "/"))
     safe_filename = GoogleDriveService.safe_filename(base_name)

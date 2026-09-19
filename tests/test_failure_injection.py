@@ -173,3 +173,17 @@ def test_small_container_disables_the_ensemble_and_lowers_dpi(monkeypatch):
     monkeypatch.delenv("OCR_CANONICAL_DPI", raising=False)
     profile = resources.ocr_profile()
     assert (profile["ensemble"], profile["dpi"]) == ("off", 150)
+
+
+def test_undersized_instance_refuses_uploads_instead_of_crashing(monkeypatch):
+    """Production has 512 MB: loading OCR would OOM-kill it mid-job."""
+    from app.core import resources
+    monkeypatch.setattr(resources, "container_memory_limit_mb", lambda: 512)
+    client, app, drive, _ = client_for()
+    response = start_job(client, token(client))
+    assert response.status_code == 503 and "1024 MB" in response.json()["detail"]
+    assert drive.uploads == []                                   # nothing half-done
+    from app.documents.capabilities import collect_capabilities
+    report = collect_capabilities(settings(), ocr_service=app.state.ocr_service)
+    assert report["capabilities"]["rapidocr"]["detail"].startswith("not probed")
+    assert report["overall"] == "NOT_READY" and "memory" in report["missing_required"]
