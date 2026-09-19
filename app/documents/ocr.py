@@ -55,7 +55,10 @@ __all__ = [
 DOCUMENT_UNREADABLE_CODE = "DOCUMENT_UNREADABLE"
 DOCUMENT_UNREADABLE_MESSAGE = "No readable text was found in the document. Upload a clearer scan or photo."
 
-CANONICAL_DPI = int(os.getenv("OCR_CANONICAL_DPI", "200"))
+from app.core.resources import ocr_profile
+
+# 200 dpi, or 150 on sub-gigabyte containers (measured; see app/core/resources.py).
+CANONICAL_DPI = ocr_profile()["dpi"]
 MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "20"))
 # Longest side of a canonical page. Phone photos are downscaled to this.
 MAX_CANONICAL_SIDE = int(os.getenv("MAX_CANONICAL_SIDE", "2600"))

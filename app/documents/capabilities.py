@@ -180,8 +180,11 @@ def collect_capabilities(settings, live_gemini: bool = False, ocr_service=None, 
     if ocr_service is not None:
         for provider in ocr_service.orchestrator.providers:
             engines[provider.name] = provider
+    from app.core.resources import ocr_profile
+    profile = ocr_profile()
     if ocr_service is not None and "paddleocr" not in engines:
-        paddle = CapabilityStatus("paddleocr", UNAVAILABLE, "disabled by OCR_ENSEMBLE=off")
+        paddle = CapabilityStatus("paddleocr", UNAVAILABLE,
+                                  "; ".join(profile["reasons"]) or "disabled by OCR_ENSEMBLE=off")
     else:
         paddle = _probe_engine(engines["paddleocr"], "paddleocr") if "paddleocr" in engines else probe_paddleocr()
     probes = [
@@ -193,8 +196,16 @@ def collect_capabilities(settings, live_gemini: bool = False, ocr_service=None, 
     ]
     if drive_service is not None or sheets_service is not None:
         probes += [probe_drive(settings, drive_service), probe_sheets(settings, sheets_service)]
+    limit = profile["memory_limit_mb"]
+    probes.append(CapabilityStatus(
+        "memory", UNAVAILABLE if profile["below_minimum"] else READY,
+        (f"container limit {limit} MB" if limit else "no container memory limit detected")
+        + f"; OCR ensemble={profile['ensemble']}, dpi={profile['dpi']}"
+        + (f" ({'; '.join(profile['reasons'])})" if profile["reasons"] else "")
+        + ("; full OCR ensemble needs >= 2560 MB" if limit and limit < 2560 else ""),
+        str(limit or ""), 0))
     by_name = {p.name: p for p in probes}
-    required = list(REQUIRED_IN_PRODUCTION) + [n for n in ("drive", "sheets") if n in by_name]
+    required = list(REQUIRED_IN_PRODUCTION) + [n for n in ("drive", "sheets") if n in by_name] + ["memory"]
     missing_required = [n for n in required if by_name[n].status != READY]
     missing_recommended = [n for n in RECOMMENDED_IN_PRODUCTION if by_name[n].status != READY]
     overall = "NOT_READY" if missing_required else ("DEGRADED" if missing_recommended else READY)

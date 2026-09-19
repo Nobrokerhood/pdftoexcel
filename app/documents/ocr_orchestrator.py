@@ -271,7 +271,8 @@ def build_default_orchestrator(ensemble: str | None = None) -> OcrOrchestrator:
     """The production engine set. The only place engine classes are instantiated."""
     from app.documents.ocr_engines import PaddleOcrProvider, RapidOcrProvider
 
-    mode = (ensemble or os.getenv("OCR_ENSEMBLE", ENSEMBLE_AUTO)).strip().lower()
+    from app.core.resources import ocr_profile
+    mode = (ensemble or ocr_profile()["ensemble"]).strip().lower()
     providers: list[OcrProvider] = [RapidOcrProvider()]
     if mode != ENSEMBLE_OFF:
         providers.append(PaddleOcrProvider())
