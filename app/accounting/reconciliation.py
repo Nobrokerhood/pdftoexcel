@@ -1,134 +1,173 @@
-import re
-from decimal import Decimal, InvalidOperation
+"""Deterministic accounting reconciliation.
+
+Every check reports three things side by side: the SOURCE-WRITTEN value, the
+CALCULATED value, and the DIFFERENCE. Nothing is ever adjusted to make an
+equation balance: a real source discrepancy (e.g. a register whose written
+closing balance is 3 rupees off its own arithmetic) is reported as a
+DISCREPANCY review item and left exactly as written.
+
+Amounts are parsed with `money.parse_amount`; an ambiguous or unreadable amount
+is excluded from sums and COUNTED, so a sum is never silently incomplete.
+"""
+
+from decimal import Decimal
 from typing import Any
 
+from app.accounting.money import format_amount, parse_amount
 
-def _parse_num(val: Any) -> Decimal | None:
-    if val is None:
-        return None
-    s = str(val).strip()
-    if not s or s in {"-", "null", "None", "N/A", "UNKNOWN"}:
-        return None
-    cleaned = re.sub(r"[^\d.\-]", "", s)
-    try:
-        return Decimal(cleaned)
-    except (InvalidOperation, ValueError):
-        return None
+MATCHED = "MATCHED"
+DISCREPANCY = "DISCREPANCY"
+NOT_AVAILABLE = "NOT_AVAILABLE"
+INCOMPLETE = "INCOMPLETE"   # a sum could not include every row (unreadable amounts)
+
+TOLERANCE = Decimal("0.01")
+
+
+def _amt(value: Any) -> Decimal | None:
+    reading = parse_amount(value)
+    return reading.value if reading.found else None
+
+
+def _sum(rows: list[dict], key: str = "Amount*") -> tuple[Decimal, int, int]:
+    total, counted, unreadable = Decimal("0"), 0, 0
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        value = _amt(row.get(key))
+        if value is None:
+            unreadable += 1
+        else:
+            total += value
+            counted += 1
+    return total, counted, unreadable
+
+
+def _check(check_id: str, label: str, source, calculated, note: str = "", incomplete: int = 0) -> dict:
+    if source is None or calculated is None:
+        status, diff = NOT_AVAILABLE, None
+    else:
+        diff = source - calculated
+        status = MATCHED if abs(diff) <= TOLERANCE else DISCREPANCY
+        if incomplete and status == DISCREPANCY:
+            status = INCOMPLETE
+    return {
+        "check_id": check_id,
+        "label": label,
+        "source_value": format_amount(source) if source is not None else "-",
+        "calculated_value": format_amount(calculated) if calculated is not None else "-",
+        "difference": format_amount(diff) if diff is not None else "-",
+        "status": status,
+        "note": note,
+        "rows_excluded_unreadable": incomplete,
+    }
 
 
 class AccountingReconciliationService:
-    """
-    Generalized accounting reconciliation service.
-    Compares mathematically calculated transaction sums, cash inflows, and net balances
-    against source-written totals/balances without silently forcing matches.
-    """
+    def reconcile(self, data: dict[str, Any], purpose: str | None = None) -> dict[str, Any]:
+        purpose = (purpose or data.get("purpose") or "").upper()
+        if purpose == "VENDOR_INVOICE" or data.get("vendor_detail"):
+            return self._vendor(data)
+        return self._register(data)
 
-    def reconcile(self, extracted_data: dict[str, Any]) -> dict[str, Any]:
-        rows = extracted_data.get("rows", [])
-        balance_summary = extracted_data.get("balance_summary") or {}
+    # -- registers / receipts ---------------------------------------------------
+    def _register(self, data: dict) -> dict:
+        rows = [r for r in data.get("rows") or [] if isinstance(r, dict)]
+        inflow_rows = [r for r in data.get("inflow_rows") or [] if isinstance(r, dict)]
+        summary = data.get("balance_summary") or {}
+        legacy_inflows = [i for i in summary.get("inflows") or [] if isinstance(i, dict)]
 
-        # 1. Calculated transactions sum
-        total_tx_amount = Decimal("0")
-        valid_row_count = 0
-        for r in rows:
-            if isinstance(r, dict):
-                amt = _parse_num(r.get("Amount*", r.get("amount")))
-                if amt is not None:
-                    total_tx_amount += amt
-                    valid_row_count += 1
+        tx_sum, tx_counted, tx_unreadable = _sum(rows)
+        in_sum, in_counted, in_unreadable = _sum(inflow_rows)
+        if not inflow_rows and legacy_inflows:
+            in_sum, in_counted, in_unreadable = _sum(legacy_inflows, "amount")
 
-        # 2. Inflows
-        inflows = balance_summary.get("inflows", [])
-        total_inflow_amount = Decimal("0")
-        if isinstance(inflows, list):
-            for inf in inflows:
-                if isinstance(inf, dict):
-                    amt = _parse_num(inf.get("amount"))
-                    if amt is not None:
-                        total_inflow_amount += amt
-                elif isinstance(inf, (int, float, str)):
-                    amt = _parse_num(inf)
-                    if amt is not None:
-                        total_inflow_amount += amt
+        written_exp = _amt(summary.get("total_expenditure"))
+        written_rec = _amt(summary.get("total_receipts"))
+        written_open = _amt(summary.get("opening_balance"))
+        written_close = _amt(summary.get("closing_balance"))
+        have_inflows = (in_counted + in_unreadable) > 0
 
-        # 3. Source-written totals
-        source_expenditure_raw = balance_summary.get("total_expenditure")
-        source_expenditure = _parse_num(source_expenditure_raw)
+        checks = [
+            _check("EXPENDITURE_TOTAL", "Written expenditure total vs sum of transaction rows",
+                   written_exp, tx_sum if rows else None, incomplete=tx_unreadable),
+            _check("RECEIPTS_TOTAL", "Written receipts total vs sum of cash inflow rows",
+                   written_rec, in_sum if have_inflows else None, incomplete=in_unreadable),
+        ]
+        receipts_basis = written_rec if written_rec is not None else (in_sum if have_inflows else None)
+        closing_from_totals = (receipts_basis - written_exp) if (receipts_basis is not None and written_exp is not None) else None
+        checks.append(_check(
+            "CLOSING_FROM_WRITTEN_TOTALS",
+            "Written closing balance vs (receipts total - written expenditure total)",
+            written_close, closing_from_totals,
+            note="uses the totals written on the document"))
 
-        source_receipts_raw = balance_summary.get("total_receipts")
-        source_receipts = _parse_num(source_receipts_raw)
+        derived_adjustment = (written_exp - tx_sum) if (written_exp is not None and rows) else None
+        if written_open is not None and derived_adjustment is not None:
+            checks.append(_check(
+                "OPENING_ADJUSTMENT",
+                "Opening balance (magnitude) vs adjustment implied by the written expenditure total",
+                abs(written_open), derived_adjustment,
+                note=("written expenditure total minus the sum of transaction rows; for a register that "
+                      "carries a negative opening balance this should equal the deficit"),
+                incomplete=tx_unreadable))
+        if written_open is not None and rows and have_inflows:
+            checks.append(_check(
+                "CLOSING_FROM_ROWS",
+                "Written closing balance vs (opening + inflow rows - transaction rows)",
+                written_close, written_open + in_sum - tx_sum, incomplete=tx_unreadable + in_unreadable))
 
-        source_opening_raw = balance_summary.get("opening_balance")
-        source_opening = _parse_num(source_opening_raw)
-
-        source_closing_raw = balance_summary.get("closing_balance")
-        source_closing = _parse_num(source_closing_raw)
-
-        # 4. Expenditure Comparison
-        expenditure_diff = None
-        expenditure_status = "NOT_AVAILABLE"
-        if source_expenditure is not None:
-            expenditure_diff = float(total_tx_amount - source_expenditure)
-            if abs(expenditure_diff) < 0.01:
-                expenditure_status = "MATCHED"
-            else:
-                expenditure_status = "DISCREPANCY"
-
-        # 5. Inflow / Receipt Comparison
-        inflow_diff = None
-        inflow_status = "NOT_AVAILABLE"
-        if source_receipts is not None and total_inflow_amount > 0:
-            inflow_diff = float(total_inflow_amount - source_receipts)
-            if abs(inflow_diff) < 0.01:
-                inflow_status = "MATCHED"
-            else:
-                inflow_status = "DISCREPANCY"
-
-        # 6. Net Calculated Balance
-        # Net balance = Inflows - Accounted Outflows (or - Transactions)
-        effective_outflows = source_expenditure if source_expenditure is not None else total_tx_amount
-        effective_inflows = source_receipts if source_receipts is not None else total_inflow_amount
-        calculated_net_balance = effective_inflows - effective_outflows
-
-        closing_diff = None
-        closing_status = "NOT_AVAILABLE"
-        if source_closing is not None and (effective_inflows > 0 or effective_outflows > 0):
-            closing_diff = float(calculated_net_balance - source_closing)
-            if abs(closing_diff) < 0.01:
-                closing_status = "MATCHED"
-            else:
-                closing_status = "DISCREPANCY"
-
-        # 7. Opening / Carry-forward adjustment
-        derived_opening_adjustment = None
-        opening_diff = None
-        if source_expenditure is not None and total_tx_amount > 0:
-            derived_opening_adjustment = float(source_expenditure - total_tx_amount)
-            if source_opening is not None:
-                opening_diff = float(abs(Decimal(str(derived_opening_adjustment))) - abs(source_opening))
-
-        overall_status = "MATCHED"
-        if expenditure_status == "DISCREPANCY" or closing_status == "DISCREPANCY" or inflow_status == "DISCREPANCY":
-            overall_status = "DISCREPANCY"
-        elif expenditure_status == "NOT_AVAILABLE" and closing_status == "NOT_AVAILABLE":
-            overall_status = "UNCHECKED"
-
+        status = MATCHED
+        if any(c["status"] in (DISCREPANCY, INCOMPLETE) for c in checks):
+            status = DISCREPANCY
+        elif all(c["status"] == NOT_AVAILABLE for c in checks):
+            status = "UNCHECKED"
         return {
-            "overall_status": overall_status,
-            "calculated_transaction_total": float(total_tx_amount),
-            "source_total_expenditure": str(source_expenditure_raw) if source_expenditure_raw is not None else "-",
-            "expenditure_difference": expenditure_diff,
-            "expenditure_status": expenditure_status,
-            "calculated_inflow_total": float(total_inflow_amount) if total_inflow_amount > 0 else "-",
-            "source_total_receipts": str(source_receipts_raw) if source_receipts_raw is not None else "-",
-            "inflow_difference": inflow_diff,
-            "inflow_status": inflow_status,
-            "source_opening_balance": str(source_opening_raw) if source_opening_raw is not None else "-",
-            "derived_opening_adjustment": derived_opening_adjustment,
-            "opening_balance_difference": opening_diff,
-            "calculated_net_balance": float(calculated_net_balance) if (effective_inflows > 0 or effective_outflows > 0) else "-",
-            "source_closing_balance": str(source_closing_raw) if source_closing_raw is not None else "-",
-            "closing_balance_difference": closing_diff,
-            "closing_status": closing_status,
-            "notes": balance_summary.get("notes", []),
+            "schema_version": 2,
+            "overall_status": status,
+            "calculated_transaction_total": format_amount(tx_sum),
+            "transaction_rows_counted": tx_counted,
+            "transaction_rows_unreadable": tx_unreadable,
+            "calculated_inflow_total": format_amount(in_sum) if have_inflows else "-",
+            "inflow_rows_counted": in_counted,
+            "inflow_rows_unreadable": in_unreadable,
+            "source_total_expenditure": format_amount(written_exp) if written_exp is not None else "-",
+            "source_total_receipts": format_amount(written_rec) if written_rec is not None else "-",
+            "source_opening_balance": format_amount(written_open) if written_open is not None else "-",
+            "source_closing_balance": format_amount(written_close) if written_close is not None else "-",
+            "derived_opening_adjustment": format_amount(derived_adjustment) if derived_adjustment is not None else "-",
+            "checks": checks,
+            "notes": list(summary.get("notes") or []),
+            "policy": "Source values are never changed to make totals balance; differences are reported for review.",
+        }
+
+    # -- vendor invoices -------------------------------------------------------
+    def _vendor(self, data: dict) -> dict:
+        detail = data.get("vendor_detail") or {}
+        rows = [r for r in data.get("rows") or [] if isinstance(r, dict)]
+        items_sum, counted, unreadable = _sum(rows)
+        taxable = _amt(detail.get("taxable_amount"))
+        total = _amt(detail.get("total_amount"))
+        taxes = [(_amt(detail.get(k)) or Decimal("0")) for k in ("cgst_amount", "sgst_amount", "igst_amount")]
+        tds = _amt(detail.get("tds_amount")) or Decimal("0")
+        checks = [
+            _check("LINE_ITEMS_VS_TAXABLE", "Taxable value vs sum of line items", taxable,
+                   items_sum if rows else None, incomplete=unreadable),
+        ]
+        base = taxable if taxable is not None else (items_sum if rows else None)
+        expected_total = (base + sum(taxes) - tds) if base is not None else None
+        checks.append(_check("INVOICE_TOTAL", "Invoice total vs (taxable or line items) + GST - TDS",
+                             total, expected_total, incomplete=unreadable))
+        status = MATCHED
+        if any(c["status"] in (DISCREPANCY, INCOMPLETE) for c in checks):
+            status = DISCREPANCY
+        elif all(c["status"] == NOT_AVAILABLE for c in checks):
+            status = "UNCHECKED"
+        return {
+            "schema_version": 2,
+            "overall_status": status,
+            "calculated_line_item_total": format_amount(items_sum),
+            "line_items_counted": counted,
+            "line_items_unreadable": unreadable,
+            "checks": checks,
+            "policy": "Source values are never changed to make totals balance; differences are reported for review.",
         }

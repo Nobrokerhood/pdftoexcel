@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.config import Settings
-from app.google.sheets_service import GoogleSheetsNotConfiguredError, GoogleSheetsService
+from app.google.sheets_service import GoogleSheetsNotConfiguredError, GoogleSheetsService, submit_write
 
 
 logger = logging.getLogger(__name__)
@@ -15,14 +15,8 @@ class AuditLogService:
         self.sheets_service = sheets_service
 
     def _append(self, table_key: str, values: list[Any]) -> bool:
-        try:
-            return self.sheets_service.append_table_row(table_key, values)
-        except GoogleSheetsNotConfiguredError:
-            logger.info("Audit append skipped because sheet is not configured.")
-            return False
-        except Exception as exc:
-            logger.error("Audit append failed: %s", exc)
-            return False
+        # Queued: an audit write can never fail or slow the request it records.
+        return submit_write(self.sheets_service, lambda: self.sheets_service.append_table_row(table_key, values))
 
     def login(self, session_id: str, email: str, name: str, ip: str, user_agent: str):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -109,33 +103,11 @@ class ProcessingLogService:
         source_folder_id: str = "",
         overall_status: str = "STARTED",
     ) -> bool:
-        try:
-            return self.sheets_service.append_table_row(
-                "processing_log",
-                [
-                    job_id,
-                    session_id,
-                    user_email,
-                    purpose,
-                    template_code,
-                    source_filename,
-                    source_drive_file_id,
-                    source_folder_id,
-                    "NOT_STARTED",
-                    "NOT_STARTED",
-                    "NOT_STARTED",
-                    "NOT_STARTED",
-                    "NOT_STARTED",
-                    "",
-                    "",
-                    overall_status,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "",
-                ],
-            )
-        except GoogleSheetsNotConfiguredError:
-            logger.info("Processing log skipped because sheet is not configured.")
-            return False
+        values = [job_id, session_id, user_email, purpose, template_code, source_filename, source_drive_file_id,
+                  source_folder_id, "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "", "",
+                  overall_status, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ""]
+        return submit_write(self.sheets_service, lambda: self.sheets_service.append_table_row("processing_log", values),
+                            coalesce_key=None)
 
     def update_job(self, job) -> bool:
         updates = {
@@ -151,16 +123,7 @@ class ProcessingLogService:
             "Overall Status": job.overall_status,
             "Completed At": job.completed_at,
         }
-        try:
-            return self.sheets_service.update_table_row_by_key(
-                "processing_log",
-                "Job ID",
-                job.job_id,
-                updates,
-            )
-        except GoogleSheetsNotConfiguredError:
-            logger.info("Processing log update skipped because sheet is not configured.")
-            return False
-        except Exception as exc:
-            logger.error("Processing log update failed: %s", exc)
-            return False
+        return submit_write(
+            self.sheets_service,
+            lambda: self.sheets_service.update_table_row_by_key("processing_log", "Job ID", job.job_id, updates),
+            coalesce_key=f"processing_log:{job.job_id}")

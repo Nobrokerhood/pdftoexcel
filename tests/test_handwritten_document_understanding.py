@@ -8,7 +8,8 @@ from app.accounting.reconciliation import AccountingReconciliationService
 from app.accounting.schemas import MemberReceiptExtraction
 from app.accounting.templates import MEMBER_RECEIPT_TEMPLATE, NBH_IMPORT_COLUMNS
 from app.accounting.output import TemplateOutputGenerator
-from app.agents.extractor import validate_extraction, _clean_dash
+from app.agents.extractor import validate_extraction
+from app.accounting.document_result import clean_cell as _clean_dash
 
 
 def test_clean_dash_helper():
@@ -81,12 +82,14 @@ def test_reconciliation_service_math_and_discrepancy():
         }
     }
     recon = recon_service.reconcile(extracted_data)
-    assert recon["calculated_inflow_total"] == 108800.0
-    assert recon["source_total_receipts"] == "108800"
-    assert recon["inflow_status"] == "MATCHED"
-    assert recon["calculated_net_balance"] == 10177.0  # 108800 - 98623
-    assert recon["closing_balance_difference"] == 3.0   # 10177 - 10174
-    assert recon["closing_status"] == "DISCREPANCY"
+    checks = {c["check_id"]: c for c in recon["checks"]}
+    assert recon["calculated_inflow_total"] == "108800"
+    assert checks["RECEIPTS_TOTAL"]["status"] == "MATCHED"
+    closing = checks["CLOSING_FROM_WRITTEN_TOTALS"]
+    assert closing["source_value"] == "10174"
+    assert closing["calculated_value"] == "10177"        # 108800 - 98623
+    assert closing["difference"] == "-3"                  # source - calculated
+    assert closing["status"] == "DISCREPANCY"
 
 
 def test_exact_12_column_nbh_excel_output():
@@ -160,12 +163,12 @@ def test_salary_group_vs_inflow_separation():
 def test_handwritten_benchmark_full_regression():
     benchmark_rows = [
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "266", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "900", "Transaction Date*": "04-07-2025", "Comments": "Firm Registration Stamp papers", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "267", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "140", "Transaction Date*": "04-07-2025", "Comments": "Stationery items", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "268", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "700", "Transaction Date*": "04-07-2025", "Comments": "Letterhead printing", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "269", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Clubhouse", "Amount*": "1200", "Transaction Date*": "05-07-2025", "Comments": "Housekeeping materials", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "270", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Clubhouse", "Amount*": "500", "Transaction Date*": "05-07-2025", "Comments": "Sanitizer and soaps", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "271", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "800", "Transaction Date*": "06-07-2025", "Comments": "Lawn mowing petrol", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "272", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "450", "Transaction Date*": "06-07-2025", "Comments": "Pesticide spray", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "267", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "140", "Transaction Date*": "04-07-2025", "Comments": "Tea + Biscuits", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "268", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "700", "Transaction Date*": "04-07-2025", "Comments": "Table cloth washing purpose", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "269", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "130", "Transaction Date*": "04-07-2025", "Comments": "Tea + Biscuits (03-07-25)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "270", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Shed (Office)", "Amount*": "1800", "Transaction Date*": "06-07-2025", "Comments": "Labour payment for cement work for shed", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "271", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "300", "Transaction Date*": "07-07-2025", "Comments": "Water bottles 2 cans (office use)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "274", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "200", "Transaction Date*": "08-07-2025", "Comments": "Grass cutting machine petrol", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "284", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "10000", "Transaction Date*": "10-07-2025", "Comments": "Sujatha (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "285", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "8400", "Transaction Date*": "10-07-2025", "Comments": "Saidamma (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "286", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "9000", "Transaction Date*": "10-07-2025", "Comments": "Lalitha (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
@@ -173,21 +176,21 @@ def test_handwritten_benchmark_full_regression():
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "288", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "9400", "Transaction Date*": "10-07-2025", "Comments": "Suvarna (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "289", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "12000", "Transaction Date*": "10-07-2025", "Comments": "Padma (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "290", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary", "Amount*": "10000", "Transaction Date*": "10-07-2025", "Comments": "Jhansi (H/K) Jun-25 Salary", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "291", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society Electrical", "Amount*": "880", "Transaction Date*": "11-07-2025", "Comments": "Common electrical wire Transport charges", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "292", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "350", "Transaction Date*": "11-07-2025", "Comments": "Electricity bill payment receipt copy", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "293", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Water", "Amount*": "1500", "Transaction Date*": "12-07-2025", "Comments": "Water tanker payment", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "297", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office (Shed)", "Amount*": "2250", "Transaction Date*": "13-07-2025", "Comments": "Krishna Reddy Iron Stand Rent for (Shed)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "298", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Water", "Amount*": "750", "Transaction Date*": "13-07-2025", "Comments": "Borewell motor repair", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "299", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "600", "Transaction Date*": "14-07-2025", "Comments": "Tree trimming labor", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "291", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society Electrical", "Amount*": "880", "Transaction Date*": "10-07-2025", "Comments": "common electrical wire Transport charges", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "292", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "200", "Transaction Date*": "10-07-2025", "Comments": "Grass cutting machine Petrol", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "296", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Water", "Amount*": "1090", "Transaction Date*": "15-07-2025", "Comments": "Suresh water supply drinking water 10 cans", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "297", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office (Shed)", "Amount*": "2250", "Transaction Date*": "15-07-2025", "Comments": "Krishna Reddy Iron Stand Rent for (Shed)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "298", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office (Shed)", "Amount*": "5000", "Transaction Date*": "15-07-2025", "Comments": "Md. Nasar Table Advance for (shed)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "299", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Miscellaneous", "Amount*": "2000", "Transaction Date*": "15-07-2025", "Comments": "Iron water work miscellaneous (Jun-25)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "300", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society Electrical", "Amount*": "2500", "Transaction Date*": "15-07-2025", "Comments": "Labour payment for common electrical wire (105)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "301", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Shed (Office)", "Amount*": "2400", "Transaction Date*": "15-07-2025", "Comments": "Iron stand Rent purpose for shed 8 days", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "302", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society", "Amount*": "1789", "Transaction Date*": "16-07-2025", "Comments": "Kiranam & General Stores (water bottles & sunblock)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "303", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "320", "Transaction Date*": "16-07-2025", "Comments": "Tea & snacks for committee meeting", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "304", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary Advance", "Amount*": "3000", "Transaction Date*": "17-07-2025", "Comments": "Jhansi (H/K) Salary Advance (July-25)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "305", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Clubhouse", "Amount*": "420", "Transaction Date*": "18-07-2025", "Comments": "Gym cleaning supplies", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "306", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Office", "Amount*": "180", "Transaction Date*": "18-07-2025", "Comments": "Postage and courier", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "302", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society", "Amount*": "1789", "Transaction Date*": "15-07-2025", "Comments": "Kiranam & General Stores (water bottles & sunblock)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "303", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Miscellaneous", "Amount*": "1000", "Transaction Date*": "15-07-2025", "Comments": "Union Bank A/c Transfer purpose (Attender)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "304", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Salary Advance", "Amount*": "3000", "Transaction Date*": "15-07-2025", "Comments": "Jhansi (H/K) Salary Advance (July-25)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "305", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Society", "Amount*": "200", "Transaction Date*": "15-07-2025", "Comments": "Mahender mosquito fogging", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "306", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Garden", "Amount*": "200", "Transaction Date*": "18-07-2025", "Comments": "Grass cutting machine Petrol", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
         {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "307", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Shed (Office)", "Amount*": "750", "Transaction Date*": "19-07-2025", "Comments": "Krishna Reddy Iron Stand Rent 1 day", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
-        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "308", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Miscellaneous", "Amount*": "444", "Transaction Date*": "20-07-2025", "Comments": "General hardware nails and screws", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
+        {"Payment Type*": "Cash", "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-", "Cheque/Ref No*": "308", "Tower No*": "-", "Flat No*": "-", "Bill Head*": "Shed (Office)", "Amount*": "200", "Transaction Date*": "19-07-2025", "Comments": "Nuts & Bolts for fitting purpose (shed)", "Meter No": "-", "Cheque Issuer Bank": "-", "Cheque Date": "-"},
     ]
 
     assert len(benchmark_rows) == 29
@@ -219,13 +222,33 @@ def test_handwritten_benchmark_full_regression():
         }
     }
 
+    # Golden reconciliation: source-written vs calculated, never adjusted.
+    extracted_data["balance_summary"]["opening_balance"] = "-1714"   # written as a deficit
+    before = [dict(r) for r in benchmark_rows]
     recon = AccountingReconciliationService().reconcile(extracted_data)
-    assert recon["calculated_inflow_total"] == 108800.0
-    assert recon["source_total_receipts"] == "108800"
-    assert recon["inflow_status"] == "MATCHED"
-    assert recon["calculated_net_balance"] == 10177.0
-    assert recon["closing_balance_difference"] == 3.0
-    assert recon["closing_status"] == "DISCREPANCY"
+    checks = {c["check_id"]: c for c in recon["checks"]}
+    assert recon["calculated_transaction_total"] == "96429"
+    assert recon["calculated_inflow_total"] == "108800"
+    assert checks["EXPENDITURE_TOTAL"]["source_value"] == "98623"
+    assert checks["EXPENDITURE_TOTAL"]["status"] == "DISCREPANCY"
+    assert recon["derived_opening_adjustment"] == "2194"
+    closing = checks["CLOSING_FROM_WRITTEN_TOTALS"]
+    assert (closing["source_value"], closing["calculated_value"], closing["difference"]) == ("10174", "10177", "-3")
+    opening = checks["OPENING_ADJUSTMENT"]
+    assert (opening["source_value"], opening["calculated_value"], opening["difference"]) == ("1714", "2194", "-480")
+    assert opening["status"] == closing["status"] == "DISCREPANCY"
+    assert recon["overall_status"] == "DISCREPANCY"
+    assert benchmark_rows == before, "reconciliation must never alter source values"
+
+    # Both discrepancies surface as non-blocking review warnings.
+    from app.accounting.validation import AccountingValidationService
+    extracted_data["reconciliation"] = recon
+    for row in extracted_data["rows"]:
+        row["_status"] = "ACCEPTED"
+    issues = AccountingValidationService().validate("PETTY_CASH_REGISTER", extracted_data).issues
+    warned = [i for i in issues if i.code == "RECONCILIATION_DISCREPANCY"]
+    assert any("-3" in i.message for i in warned) and any("-480" in i.message for i in warned)
+    assert all(i.severity == "WARNING" for i in warned)
 
     generator = TemplateOutputGenerator()
     _, excel_bytes = generator.generate_xlsx(MEMBER_RECEIPT, MEMBER_RECEIPT_TEMPLATE, extracted_data, "job_bench")

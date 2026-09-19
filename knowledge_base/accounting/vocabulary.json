@@ -13,7 +13,7 @@
     "meter_number": ["meter no", "meter number"]
   },
   "vendor_invoice_labels": {
-    "bill_number": ["invoice no", "invoice number", "bill no", "bill number", "inv no"],
+    "bill_number": ["invoice no", "invoice number", "bill no", "bill number", "inv no", "memo no", "no.", "no.:", "no"],
     "bill_date": ["invoice date", "bill date", "date"],
     "due_date": ["due date", "payment due"],
     "vendor_gstin": ["gstin", "gst no", "gstin/uin"],

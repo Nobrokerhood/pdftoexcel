@@ -1,9 +1,12 @@
 from dataclasses import dataclass
+import logging
 from typing import Any
 
 from app.accounting.purposes import supported_purpose_codes
 from app.core.config import Settings
 from app.google.sheets_service import GoogleSheetsNotConfiguredError, GoogleSheetsService
+
+logger = logging.getLogger(__name__)
 
 
 class FolderConfigurationError(RuntimeError):
@@ -67,6 +70,9 @@ class FolderConfigService:
         try:
             records = self.sheets_service.read_table("folder_config")
         except GoogleSheetsNotConfiguredError as exc:
+            raise FolderConfigurationError("FOLDER_CONFIGURATION_MISSING") from exc
+        except Exception as exc:
+            logger.warning("Could not read folder_config from Google Sheets: %s", exc)
             raise FolderConfigurationError("FOLDER_CONFIGURATION_MISSING") from exc
 
         for record in records:

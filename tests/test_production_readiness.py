@@ -1,3 +1,4 @@
+from tests.conftest import png_bytes
 import io
 import pytest
 from starlette.testclient import TestClient
@@ -110,14 +111,31 @@ def test_file_upload_sanitizes_filename_and_prevents_path_traversal():
         "/processing/jobs",
         headers=headers(session_token),
         data={"purpose": "MEMBER_RECEIPT"},
-        files={"file": ("../../../../etc/passwd.pdf", b"SYNTHETIC TEST DATA", "application/pdf")},
+        files={"file": ("../../../../etc/passwd.png", png_bytes(), "image/png")},
     )
     assert res.status_code == 200
     job = res.json()
     assert ".." not in job["source_filename"]
     assert "/" not in job["source_filename"]
     assert "\\" not in job["source_filename"]
-    assert job["source_filename"] == "passwd.pdf"
+    assert job["source_filename"] == "passwd.png"
+
+
+def test_synthetic_signature_bypass_is_gone():
+    """The upload validator used to accept b"SYNTHETIC" as a PDF/JPEG/PNG signature."""
+    client, _, _, _ = client_for()
+    session_token = token(client)
+    for name, ctype in (("a.pdf", "application/pdf"), ("a.jpg", "image/jpeg"), ("a.png", "image/png")):
+        res = client.post("/processing/jobs", headers=headers(session_token), data={"purpose": "MEMBER_RECEIPT"},
+                          files={"file": (name, b"SYNTHETIC TEST DATA", ctype)})
+        assert res.status_code == 400, name
+
+
+def test_image_with_valid_magic_but_undecodable_body_is_rejected():
+    client, _, _, _ = client_for()
+    res = client.post("/processing/jobs", headers=headers(token(client)), data={"purpose": "MEMBER_RECEIPT"},
+                      files={"file": ("a.png", b"\x89PNG\r\n\x1a\n garbage", "image/png")})
+    assert res.status_code == 400
 
 
 def test_job_access_isolation_between_users():
@@ -201,7 +219,7 @@ def test_source_document_endpoint_streams_for_owner():
 
     res = client.get(f"/processing/jobs/{job['job_id']}/source", headers=headers(token_a))
     assert res.status_code == 200
-    assert res.content == b"SYNTHETIC TEST DATA"
+    assert res.content == png_bytes()
 
 
 def test_health_and_readiness_endpoints():
@@ -212,10 +230,12 @@ def test_health_and_readiness_endpoints():
     assert res_health.status_code == 200
     assert res_health.json()["status"] == "healthy"
 
-    # Readiness probe reports dependencies
+    # Readiness reflects real capability probes (it used to hardcode rapidocr_ready=True)
     res_ready = client.get("/readiness")
-    assert res_ready.status_code == 200
-    assert "checks" in res_ready.json()
+    body = res_ready.json()
+    assert res_ready.status_code in (200, 503)
+    assert body["overall"] in ("READY", "DEGRADED", "NOT_READY")
+    assert (res_ready.status_code == 503) == (body["overall"] == "NOT_READY")
 
 
 def test_production_config_validation_fails_fast_on_missing_keys():

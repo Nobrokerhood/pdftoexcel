@@ -45,6 +45,19 @@ class MemberReceiptExtraction(BaseModel):
     balance_summary: dict[str, Any] | None = None
     reconciliation: dict[str, Any] | None = None
     rows: list[dict[str, Any]] = Field(default_factory=list)
+    # Provenance and candidate accounting. These were previously dropped by the
+    # model, which made the pipeline report a local fallback run as GEMINI and
+    # hid every rejected candidate.
+    extraction_provider: str | None = Field(default=None, alias="_extraction_provider")
+    extraction_outcome: str | None = None
+    extraction_notice: str | None = None
+    candidate_ledger: dict[str, Any] | None = None
+    unresolved_rows: list[dict[str, Any]] = Field(default_factory=list)
+    register_detail: dict[str, Any] | None = None
+    repair_status: str | None = None
+    repair_notice: str | None = None
+
+    model_config = {"populate_by_name": True}
 
 
 class VendorExpense(BaseModel):
@@ -96,9 +109,13 @@ class CashRegisterExtraction(BaseModel):
 
 class VerificationFieldResult(BaseModel):
     field: str
+    # Immutable row identity. Verification results are attributed by row_id only,
+    # never by position or by a free-form field name.
+    row_id: str | None = None
+    column: str | None = None
     extracted_value: Any = None
     verified_value: Any = None
-    status: Literal["VERIFIED", "MISMATCH", "NOT_FOUND", "UNCERTAIN"]
+    status: Literal["VERIFIED", "MISMATCH", "NOT_FOUND", "UNCERTAIN", "UNVERIFIED"]
     confidence: float = 0
     # Absent fields have nothing to quote; models return null for them.
     evidence: Annotated[str, BeforeValidator(lambda value: "" if value is None else value)] = ""
@@ -108,6 +125,10 @@ class VerificationFieldResult(BaseModel):
 class VerificationResult(BaseModel):
     overall_status: Literal["PASSED", "FAILED", "NEEDS_REVIEW"]
     fields: list[VerificationFieldResult] = Field(default_factory=list)
+    provider: str = ""
+    method: str = ""
+    rows: dict[str, str] = Field(default_factory=dict)  # row_id -> VERIFIED | NEEDS_REVIEW | UNVERIFIED
+    notes: list[str] = Field(default_factory=list)
 
 
 class MappingMissingItem(BaseModel):
@@ -136,6 +157,8 @@ class ValidationIssue(BaseModel):
     current_value: Any = None
     suggested_value: Any = None
     action: str = ""
+    row_id: str | None = None
+    resolution: dict | None = None
 
 
 class ValidationResult(BaseModel):
@@ -144,11 +167,16 @@ class ValidationResult(BaseModel):
 
 
 class HumanCorrection(BaseModel):
+    """One audited reviewer action: issue, resolution, user, time, before, after, reason."""
     field: str
     old_value: Any = None
     new_value: Any = None
     user_email: str
     timestamp: str
+    row_id: str | None = None
+    action: str = "EDIT"      # EDIT | CONFIRM | DISMISS | PROMOTE | ADD_ROW | DELETE_ROW | MAPPING
+    issue: str | None = None
+    reason: str | None = None
 
 
 class JobSummary(BaseModel):

@@ -45,6 +45,13 @@ AUTH_FAILURE_REASONS = ("API_KEY_INVALID", "API_KEY_SERVICE_BLOCKED", "API_KEY_H
 
 PRIMARY_CAP_COOLDOWN_SECONDS = 15 * 60
 
+# Hard per-request timeout. Without it a stalled Gemini call held a worker indefinitely.
+GEMINI_TIMEOUT_MS = int(__import__("os").getenv("GEMINI_TIMEOUT_MS", "150000"))
+
+
+def _http_options():
+    return types.HttpOptions(timeout=GEMINI_TIMEOUT_MS)
+
 
 class GeminiSpendCapError(ExternalServiceUnavailableError):
     """The Google project behind the Gemini API key has hit its spending cap."""
@@ -165,7 +172,9 @@ class GeminiDocumentClient:
         self._fallback_client = None
         self._clock = clock
         self._primary_capped_until = 0.0
-        self.call_history: list[dict] = []
+        # Bounded: this is process-wide diagnostics, not per-job state.
+        from collections import deque
+        self.call_history = deque(maxlen=200)
         self._history_lock = threading.Lock()
 
     def _get_client(self):
@@ -175,7 +184,7 @@ class GeminiDocumentClient:
         if not self.settings.gemini_api_key:
             raise ServiceNotConfiguredError("GEMINI_API_KEY is not configured.")
 
-        self._client = genai.Client(api_key=self.settings.gemini_api_key)
+        self._client = genai.Client(api_key=self.settings.gemini_api_key, http_options=_http_options())
         logger.info("Gemini client configured for model: %s", self.settings.gemini_model)
         return self._client
 
@@ -191,7 +200,7 @@ class GeminiDocumentClient:
     def _get_fallback_client(self):
         if self._fallback_client is None:
             self._fallback_client = genai.Client(
-                api_key=self.settings.gemini_api_key_fallback.strip()
+                api_key=self.settings.gemini_api_key_fallback.strip(), http_options=_http_options()
             )
             logger.info("Gemini fallback client configured.")
         return self._fallback_client
@@ -284,6 +293,7 @@ class GeminiDocumentClient:
                     "text_chars": text_chars,
                     "duration_seconds": duration,
                     "status": "SUCCESS",
+                    "at": time.time(),
                 })
             logger.info("GEMINI_CALL_COMPLETED [purpose=%s, model=%s, images=%d, chars=%d, duration=%.3fs]",
                         purpose, self.settings.gemini_model, image_count, text_chars, duration)
@@ -300,10 +310,12 @@ class GeminiDocumentClient:
                     "duration_seconds": duration,
                     "status": "FAILED",
                     "error": type(exc).__name__,
+                    "at": time.time(),
                 })
             raise
 
-    def generate_json(self, prompt_parts: list[Any], retries: int = 2, purpose: str = "json"):
+    def generate_json(self, prompt_parts: list[Any], retries: int = 2, purpose: str = "json",
+                      thinking_budget: int = 0):
         start_t = time.perf_counter()
         image_count = sum(1 for p in prompt_parts if hasattr(p, "mode") or hasattr(p, "size"))
         text_chars = sum(len(p) for p in prompt_parts if isinstance(p, str))
@@ -314,7 +326,7 @@ class GeminiDocumentClient:
                 contents=prompt_parts,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    thinking_config=types.ThinkingConfig(thinking_budget=thinking_budget),
                 ),
             )
             text = response.text.strip()
@@ -336,6 +348,7 @@ class GeminiDocumentClient:
                     "text_chars": text_chars,
                     "duration_seconds": duration,
                     "status": "SUCCESS",
+                    "at": time.time(),
                 })
             logger.info("GEMINI_CALL_COMPLETED [purpose=%s, model=%s, images=%d, chars=%d, duration=%.3fs]",
                         purpose, self.settings.gemini_model, image_count, text_chars, duration)
@@ -352,5 +365,6 @@ class GeminiDocumentClient:
                     "duration_seconds": duration,
                     "status": "FAILED",
                     "error": type(exc).__name__,
+                    "at": time.time(),
                 })
             raise

@@ -1,22 +1,49 @@
-fastapi
-uvicorn
-pandas
-pillow
-google-genai
-google-api-python-client
-pdf2image
-python-dotenv
-openpyxl
-PyPDF2
-python-multipart
-gspread
-google-auth
-langgraph
-rapidocr-onnxruntime
-onnxruntime
+# Production dependencies, pinned to the versions the test suite and golden
+# corpus were verified against. Local and production must run the same stack:
+# an unpinned or undeclared dependency silently changes accounting behaviour.
 
-# Knowledge Base Dependencies (ADD THESE 4 LINES)
-sentence-transformers
-pinecone
-scikit-learn
-chromadb
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+httpx==0.28.1
+pandas==3.0.5
+pillow==12.3.0
+python-dotenv==1.2.3
+openpyxl==3.1.5
+langgraph==1.2.11
+
+# Google
+google-genai==2.22.0
+google-api-python-client==2.200.0
+google-auth==2.57.1
+gspread==6.2.1
+
+# PDF: Poppler rendering, embedded-text inspection, real text geometry.
+# pypdf and pdfplumber were imported by the code but never declared here, so a
+# fresh production build could not use the digital-PDF path.
+pdf2image==1.17.0
+pypdf==6.14.2
+pdfplumber==0.11.6
+PyPDF2==3.0.1
+
+# ---------------------------------------------------------------------------
+# OCR ENSEMBLE
+# ---------------------------------------------------------------------------
+# Engine 1. The package is `rapidocr` (NOT `rapidocr-onnxruntime`, which does not
+# provide the `rapidocr` module).
+rapidocr==3.9.2
+onnxruntime==1.30.0
+
+# Engine 2. paddlepaddle 3.0.0 on purpose: 3.3.1 imports cleanly then fails at
+# model load (ConvertPirAttribute2RuntimeAttribute not support
+# [pir::ArrayAttribute<pir::DoubleAttribute>]). CPU inference only.
+paddlepaddle==3.0.0
+paddleocr==3.7.0
+
+# PaddleOCR requires opencv-contrib-python 4.10.x.
+opencv-contrib-python==4.10.0.84
+numpy==2.3.5
+
+# The Knowledge Bot's embedding stack (sentence-transformers / PyTorch, pinecone,
+# chromadb) is NOT part of the accounting pipeline and was never installed in the
+# verified environment; it lives in requirements-kb.txt and is optional.

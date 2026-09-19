@@ -43,13 +43,103 @@ class CachedRecords:
     records: list[dict[str, Any]]
 
 
+class SheetsWriteQueue:
+    """Ordered background writer for audit / log / state rows.
+
+    * Sheets quota (429) is retried with backoff instead of failing a request.
+    * Writes sharing a coalesce key (e.g. one job's state row) collapse to the
+      latest, so a burst of status changes costs one write.
+    * A write that finally fails is logged; the in-memory job stays authoritative
+      and the next update rewrites the row, so nothing is corrupted.
+    * `synchronous=True` (tests / inline mode) executes immediately.
+    """
+
+    BACKOFF_SECONDS = (5, 15, 30, 60, 90)
+
+    def __init__(self, synchronous: bool = False):
+        import threading
+        from collections import OrderedDict
+        self.synchronous = synchronous
+        self._pending: "OrderedDict[str, object]" = OrderedDict()
+        self._cond = threading.Condition()
+        self._seq = 0
+        self.failures = 0
+        if not synchronous:
+            threading.Thread(target=self._run, name="sheets-writer", daemon=True).start()
+
+    def submit(self, fn, coalesce_key: str | None = None) -> bool:
+        if self.synchronous:
+            return self._execute(fn, retry=False)
+        with self._cond:
+            if coalesce_key is None:
+                self._seq += 1
+                coalesce_key = f"__seq_{self._seq}"
+            self._pending[coalesce_key] = fn
+            self._pending.move_to_end(coalesce_key)
+            self._cond.notify()
+        return True
+
+    def pending(self) -> int:
+        with self._cond:
+            return len(self._pending)
+
+    def _run(self):
+        while True:
+            with self._cond:
+                while not self._pending:
+                    self._cond.wait()
+                _, fn = self._pending.popitem(last=False)
+            self._execute(fn, retry=True)
+
+    def _execute(self, fn, retry: bool) -> bool:
+        attempts = self.BACKOFF_SECONDS if retry else ()
+        for wait in (0, *attempts):
+            if wait:
+                time.sleep(wait)
+            try:
+                result = fn()
+                return bool(result) if result is not None else True
+            except GoogleSheetsNotConfiguredError:
+                return False
+            except Exception as exc:
+                quota = "429" in str(exc) or "Quota exceeded" in str(exc)
+                if not (retry and quota):
+                    self.failures += 1
+                    logger.warning("Sheets write failed (%s); in-memory state kept.", type(exc).__name__)
+                    return False
+                logger.info("Sheets quota hit; retrying write after backoff.")
+        self.failures += 1
+        logger.warning("Sheets write abandoned after quota backoff; in-memory state kept.")
+        return False
+
+
+def submit_write(sheets_service, fn, coalesce_key: str | None = None) -> bool:
+    queue = getattr(sheets_service, "write_queue", None)
+    if queue is None:
+        try:
+            result = fn()
+            return bool(result) if result is not None else True
+        except GoogleSheetsNotConfiguredError:
+            return False
+        except Exception as exc:
+            logger.warning("Sheets write failed (%s).", type(exc).__name__)
+            return False
+    return queue.submit(fn, coalesce_key)
+
+
 class GoogleSheetsService:
-    def __init__(self, settings: Settings, cache_ttl_seconds: int = 60):
+    def __init__(self, settings: Settings, cache_ttl_seconds: int = 180):
         self.settings = settings
         self.cache_ttl_seconds = cache_ttl_seconds
         self._client = None
         self._cache: dict[tuple[str, str], CachedRecords] = {}
         self._disabled_reason: str | None = None
+        # Each open_by_key()/worksheet() is a quota-counted READ; handles, headers
+        # and row positions are cached so steady-state updates cost no reads.
+        self._worksheets: dict[tuple[str, str], Any] = {}
+        self._headers: dict[tuple[str, str], list[str]] = {}
+        self._row_index: dict[tuple[str, str, str, str], int] = {}
+        self.write_queue: SheetsWriteQueue | None = None
 
     def _authorize(self):
         if self._client is not None:
@@ -82,9 +172,14 @@ class GoogleSheetsService:
         if not spreadsheet_id:
             raise GoogleSheetsNotConfiguredError("Google Sheet ID is not configured.")
 
+        key = (spreadsheet_id, worksheet_name)
+        cached = self._worksheets.get(key)
+        if cached is not None:
+            return cached
         client = self._authorize()
-        spreadsheet = client.open_by_key(spreadsheet_id)
-        return spreadsheet.worksheet(worksheet_name)
+        worksheet = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+        self._worksheets[key] = worksheet
+        return worksheet
 
     def spreadsheet(self, spreadsheet_id: str | None = None):
         spreadsheet_id = spreadsheet_id or self.settings.google_accounting_spreadsheet_id
@@ -114,10 +209,16 @@ class GoogleSheetsService:
         if use_cache and cached and time.time() - cached.loaded_at < self.cache_ttl_seconds:
             return [record.copy() for record in cached.records]
 
-        worksheet = self._worksheet(spreadsheet_id, worksheet_name)
-        records = worksheet.get_all_records()
-        self._cache[key] = CachedRecords(time.time(), records)
-        return [record.copy() for record in records]
+        try:
+            worksheet = self._worksheet(spreadsheet_id, worksheet_name)
+            records = worksheet.get_all_records()
+            self._cache[key] = CachedRecords(time.time(), records)
+            return [record.copy() for record in records]
+        except Exception as exc:
+            if cached:
+                logger.warning("Google Sheets read failed (%s); using cached records.", exc)
+                return [record.copy() for record in cached.records]
+            raise
 
     def read_table(
         self,
@@ -206,11 +307,24 @@ class GoogleSheetsService:
         worksheet_name: str = "Sheet1",
     ) -> bool:
         worksheet = self._worksheet(spreadsheet_id, worksheet_name)
+        sheet_key = (spreadsheet_id or "", worksheet_name)
+        row_key = (spreadsheet_id or "", worksheet_name, key_column, key_value.lower())
+        headers = self._headers.get(sheet_key)
+        cached_row = self._row_index.get(row_key)
+        if headers and cached_row:
+            cells = [{"range": rowcol_to_a1(cached_row, headers.index(c) + 1), "values": [[safe_cell_value(v)]]}
+                     for c, v in updates.items() if c in headers]
+            if cells:
+                worksheet.batch_update(cells, value_input_option=ValueInputOption.raw)
+            self._cache.pop((spreadsheet_id or "", worksheet_name), None)
+            return True
+
         rows = worksheet.get_all_values()
         if not rows:
             return False
 
         headers = rows[0]
+        self._headers[sheet_key] = headers
         try:
             key_index = headers.index(key_column)
         except ValueError:
@@ -218,6 +332,7 @@ class GoogleSheetsService:
 
         for row_number, row in enumerate(rows[1:], start=2):
             if key_index < len(row) and row[key_index].strip().lower() == key_value.lower():
+                self._row_index[row_key] = row_number
                 # One batch request per row update: per-cell writes exceed the
                 # Sheets "write requests per minute" quota within a single job.
                 cells = [
@@ -229,9 +344,9 @@ class GoogleSheetsService:
                     if column_name in headers
                 ]
                 if cells:
-                    worksheet.batch_update(
-                        cells, value_input_option=ValueInputOption.user_entered
-                    )
+                    # RAW: user-controlled text (filenames, errors) must never be
+                    # interpreted as a Sheets formula.
+                    worksheet.batch_update(cells, value_input_option=ValueInputOption.raw)
                 self._cache.pop((spreadsheet_id or "", worksheet_name), None)
                 return True
         return False

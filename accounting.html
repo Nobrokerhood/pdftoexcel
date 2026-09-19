@@ -862,6 +862,10 @@
           </div>
 
           <!-- Duplicate Reference & Validation Issues Banner -->
+          <div class="card" id="reviewPanelCard" style="margin-bottom:14px">
+            <h3 style="margin:0 0 8px 0">Review evidence</h3>
+            <div id="reviewPanel"></div>
+          </div>
           <div class="alert-banner warn hidden" id="bannerValidationIssues">
             <span style="font-size: 20px;">⚠</span>
             <div style="flex: 1;">
@@ -1307,21 +1311,8 @@
       const startBtn = document.getElementById("startBtn");
       startBtn.disabled = true;
 
-      const truthfulStages = [
-        "Preparing document...",
-        "Reading document with OCR...",
-        "Understanding transactions with AI...",
-        "Verifying extracted data against source...",
-        "Checking accounting consistency and reconciliation...",
-        "Preparing human review..."
-      ];
-      let stageIdx = 0;
-      setStatus(truthfulStages[0], true);
-      const stageTimer = setInterval(() => {
-        stageIdx = (stageIdx + 1) % truthfulStages.length;
-        setStatus(truthfulStages[stageIdx], true);
-      }, 7000);
-
+      // Progress is ONLY what the backend reports (stage trace). No client-side timer.
+      setStatus("Uploading document...", true);
       const form = new FormData();
       form.append("purpose", purpose);
       form.append("file", file);
@@ -1334,46 +1325,63 @@
           body: form
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Processing failed.");
-        renderJob(data);
-        setStatus("Document extracted and ready for human review.", true);
+        if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Processing failed.");
+        sessionStorage.setItem("accounting_active_job_id", data.job_id);
+        await pollJob(data.job_id, data);
       } catch (err) {
         setStatus(err.message);
       } finally {
-        clearInterval(stageTimer);
         window.__ACCOUNTING_JOB_ACTIVE__ = false;
         startBtn.disabled = false;
       }
     }
 
+    const ACTIVE_STATES = new Set(["CREATED", "UPLOADING", "PROCESSING", "GENERATING_OUTPUT"]);
+
+    async function pollJob(jobId, initial) {
+      let job = initial;
+      while (true) {
+        if (job) {
+          renderProgress(job.progress || []);
+          const running = (job.progress || []).find(p => p.status === "RUNNING");
+          if (ACTIVE_STATES.has(job.overall_status)) {
+            setStatus(running ? `${running.label}: ${running.message || "in progress"}` : "Queued for processing...", true);
+          } else {
+            renderJob(job);
+            if (job.overall_status === "FAILED") setStatus(`Processing failed: ${job.last_error || "see stage details"}`, false);
+            else if (job.overall_status === "NEEDS_REVIEW") setStatus("Ready for human review.", true);
+            else setStatus(`Job status: ${job.overall_status}`, true);
+            return job;
+          }
+        }
+        await new Promise(r => setTimeout(r, 2000));
+        const res = await api(`/processing/jobs/${jobId}`);
+        if (!res.ok) { setStatus("Lost contact with the job; reopen it from Past Work."); return null; }
+        job = await res.json();
+      }
+    }
+
     const STAGE_LABELS = {
       DONE: "COMPLETED",
-      PENDING: "PENDING",
+      RUNNING: "RUNNING",
       FAILED: "FAILED",
       NEEDS_ATTENTION: "NEEDS ATTENTION",
-      NOT_REACHED: "NOT REACHED"
+      SKIPPED: "SKIPPED"
     };
 
     function renderProgress(items) {
       const list = document.getElementById("progressList");
-      const defaults = [
-        "Document uploaded",
-        "Stored in Incoming",
-        "Information extracted",
-        "Information checked",
-        "NBH fields prepared",
-        "Validation",
-        "Human review",
-        "Generate Excel"
-      ].map(label => ({ label, status: "PENDING" }));
-
-      const displayItems = items.length ? items : defaults;
-      list.innerHTML = displayItems.map(item => {
+      if (!items.length) {
+        list.innerHTML = `<li class="progress-item"><span>No stage has run yet.</span><strong></strong></li>`;
+        return;
+      }
+      list.innerHTML = items.map(item => {
         let cls = "progress-item";
         if (item.status === "DONE") cls += " done";
         else if (item.status === "FAILED") cls += " failed";
-        else if (item.status === "NEEDS_ATTENTION") cls += " attention";
-        return `<li class="${cls}"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(STAGE_LABELS[item.status] || item.status)}</strong></li>`;
+        else if (item.status === "NEEDS_ATTENTION" || item.status === "RUNNING") cls += " attention";
+        const secs = item.duration_ms != null ? ` · ${(item.duration_ms / 1000).toFixed(1)}s` : "";
+        return `<li class="${cls}" title="${escapeHtml(item.message || "")}"><span>${escapeHtml(item.label)}<small style="display:block;color:var(--muted);font-weight:400">${escapeHtml(item.message || "")}${secs}</small></span><strong>${escapeHtml(STAGE_LABELS[item.status] || item.status)}</strong></li>`;
       }).join("");
     }
 
@@ -1394,8 +1402,12 @@
 
       localRows = rawRows.map((r, i) => {
         const prevRow = (isSameJob && oldRows[i]) ? oldRows[i] : null;
+        const serverEdited = new Set(r._edited_fields || []);
         const normalized = {
-          _internal_id: prevRow ? prevRow._internal_id : ("row_" + i + "_" + Math.random().toString(36).substr(2, 6))
+          _internal_id: r._row_id || (prevRow ? prevRow._internal_id : ("new_" + i + "_" + Math.random().toString(36).substr(2, 6))),
+          _row_id: r._row_id || null,
+          _status: r._status || "UNVERIFIED",
+          _has_warn: !["ACCEPTED", "USER_CONFIRMED"].includes(r._status || "")
         };
         NBH_COLUMNS.forEach(col => {
           const rawVal = (r[col] === undefined || r[col] === null || String(r[col]).trim() === "") ? "-" : String(r[col]).trim();
@@ -1407,6 +1419,7 @@
           } else {
             normalized[col] = rawVal;
             normalized["_original_" + col] = rawVal;
+            if (serverEdited.has(col)) normalized["_edited_" + col] = true;
           }
         });
         return normalized;
@@ -1417,6 +1430,7 @@
       renderSummaryCards(job);
       renderPurposeMismatchBanner(job);
       renderValidationIssues(job);
+      renderReviewPanel(job);
       renderReconciliationCard(targetData);
       renderMappingCard(job.mapping_result || {});
       renderDocumentNotes(targetData);
@@ -1499,43 +1513,125 @@
     function renderReconciliationCard(data) {
       const card = document.getElementById("cardReconciliation");
       const recon = data.reconciliation;
-      if (!recon || recon.overall_status === "UNCHECKED") {
+      const checks = (recon && recon.checks) || [];
+      if (!checks.length || checks.every(c => c.status === "NOT_AVAILABLE")) {
         card.classList.add("hidden");
         return;
       }
       card.classList.remove("hidden");
-      const details = document.getElementById("reconDetails");
-      let html = `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">`;
-      html += `<div><strong>Transaction Sum (Calculated):</strong> ₹${recon.calculated_transaction_total?.toLocaleString?.('en-IN') || recon.calculated_transaction_total}</div>`;
-      if (recon.source_total_expenditure && recon.source_total_expenditure !== "-") {
-        html += `<div><strong>Source Total Expenditure:</strong> ₹${recon.source_total_expenditure}</div>`;
-      }
-      if (recon.source_opening_balance && recon.source_opening_balance !== "-") {
-        html += `<div><strong>Source Opening / C/F Value:</strong> ₹${escapeHtml(recon.source_opening_balance)}</div>`;
-      }
-      if (recon.derived_opening_adjustment !== null && recon.derived_opening_adjustment !== undefined) {
-        html += `<div><strong>Derived Opening Adjustment:</strong> ₹${recon.derived_opening_adjustment}</div>`;
-      }
-      if (recon.opening_balance_difference !== null && recon.opening_balance_difference !== undefined && Math.abs(recon.opening_balance_difference) > 0) {
-        html += `<div><strong>Opening Balance Difference:</strong> ₹${recon.opening_balance_difference}</div>`;
-      }
-      if (recon.calculated_inflow_total && recon.calculated_inflow_total !== "-") {
-        html += `<div><strong>Calculated Inflows:</strong> ₹${recon.calculated_inflow_total?.toLocaleString?.('en-IN') || recon.calculated_inflow_total}</div>`;
-      }
-      if (recon.source_total_receipts && recon.source_total_receipts !== "-") {
-        html += `<div><strong>Source Total Receipts:</strong> ₹${recon.source_total_receipts}</div>`;
-      }
-      if (recon.source_closing_balance && recon.source_closing_balance !== "-") {
-        html += `<div><strong>Source Closing Balance:</strong> ₹${recon.source_closing_balance}</div>`;
-      }
-      if (recon.calculated_net_balance && recon.calculated_net_balance !== "-") {
-        html += `<div><strong>Calculated Closing Balance:</strong> ₹${recon.calculated_net_balance}</div>`;
-      }
-      if (recon.closing_balance_difference !== null && Math.abs(recon.closing_balance_difference) > 0) {
-        html += `<div style="color: var(--warn); font-weight: bold; grid-column: 1 / -1;">⚠ Balance Discrepancy: Difference of ₹${recon.closing_balance_difference} between Source (₹${recon.source_closing_balance}) and Calculated (₹${recon.calculated_net_balance}) [Status: DISCREPANCY]</div>`;
-      }
-      html += `</div>`;
-      details.innerHTML = html;
+      const rows = checks.filter(c => c.status !== "NOT_AVAILABLE").map(c => {
+        const colour = c.status === "MATCHED" ? "#15803d" : "#b45309";
+        return `<tr><td>${escapeHtml(c.label)}</td><td style="text-align:right">₹${escapeHtml(c.source_value)}</td>
+          <td style="text-align:right">₹${escapeHtml(c.calculated_value)}</td>
+          <td style="text-align:right;color:${colour};font-weight:700">${escapeHtml(c.difference)}</td>
+          <td style="color:${colour};font-weight:700">${escapeHtml(c.status)}</td></tr>`;
+      }).join("");
+      document.getElementById("reconDetails").innerHTML = `
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <tr style="text-align:left"><th>Check</th><th style="text-align:right">Source-written</th><th style="text-align:right">Calculated</th><th style="text-align:right">Difference</th><th>Status</th></tr>
+          ${rows}
+        </table>
+        <div style="margin-top:6px;color:var(--muted);font-size:12px">${escapeHtml(recon.policy || "")}</div>`;
+    }
+
+    // ---------------- Review panel: evidence, blocking items, resolution --------------
+    function renderReviewPanel(job) {
+      const panel = document.getElementById("reviewPanel");
+      if (!panel) return;
+      const data = job.extracted_data || {};
+      const ledger = data.candidate_ledger || {};
+      const items = job.review_items || [];
+      const blocking = items.filter(i => i.severity === "CRITICAL" && !i.resolution);
+      const evidence = data.row_evidence || {};
+      let html = `<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:13px;margin-bottom:10px">
+        <span><strong>Extraction:</strong> ${escapeHtml(job.extraction_provider || "-")}</span>
+        <span><strong>Outcome:</strong> ${escapeHtml(data.extraction_outcome || "-")}</span>
+        <span><strong>Blocking items:</strong> ${blocking.length}</span>
+        <span title="Every OCR source region ends in exactly one state"><strong>Source ledger:</strong> ${escapeHtml(ledger.equation || "-")} ${ledger.balanced === false ? "⚠ NOT BALANCED" : ""}</span>
+      </div>`;
+      if (data.provider_note) html += `<div class="alert-banner warn" style="margin-bottom:8px">${escapeHtml(data.provider_note)}</div>`;
+      if (data.extraction_notice) html += `<div class="alert-banner warn" style="margin-bottom:8px">${escapeHtml(data.extraction_notice)}</div>`;
+      html += blocking.slice(0, 200).map(item => {
+        if (item.code === "ROW_NEEDS_REVIEW") {
+          const ev = evidence[item.row_id] || {};
+          const fields = Object.values(ev.fields || {}).map(f => {
+            const votes = (f.votes || []).map(v => `${escapeHtml(v.source)}: <code>${escapeHtml(v.raw)}</code>`).join(" · ");
+            return `<div style="margin:2px 0"><strong>${escapeHtml(f.column)}</strong> = <code>${escapeHtml(f.value)}</code>
+              <span class="badge ${["VERIFIED", "ARBITRATED"].includes(f.status) ? "ok" : "warn"}">${escapeHtml(f.status)}</span>
+              <span style="color:var(--muted)">${escapeHtml(f.reason || "")}</span><div style="color:var(--muted);font-size:12px">${votes}</div></div>`;
+          }).join("");
+          return `<div class="review-item" style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+              <strong>Row ${escapeHtml(item.row_id)} ${ev.page ? "· page " + ev.page : ""}</strong>
+              <span>
+                ${ev.bbox ? `<button class="secondary" onclick="showCrop('${escapeHtml(item.row_id)}')">Show source</button>` : ""}
+                <button class="secondary" onclick="focusRow('${escapeHtml(item.row_id)}')">Edit in grid</button>
+                <button onclick="confirmRow('${escapeHtml(item.row_id)}')">Confirm row</button>
+              </span>
+            </div>
+            <div id="crop_${escapeHtml(item.row_id)}"></div>
+            <div style="font-size:13px;margin-top:4px">${fields || escapeHtml(item.message)}</div>
+          </div>`;
+        }
+        if (item.code === "UNRESOLVED_SOURCE_ROW") {
+          return `<div class="review-item" style="border:1px solid #fde68a;border-radius:8px;padding:10px;margin-bottom:8px;background:var(--warn-bg)">
+            <strong>Possible missing row ${escapeHtml(item.row_id)}</strong><div style="font-size:13px">${escapeHtml(item.message)}</div>
+            <button onclick="promoteCandidate('${escapeHtml(item.row_id)}')">Add as row</button>
+            <button class="secondary" onclick="dismissCandidate('${escapeHtml(item.row_id)}')">Dismiss…</button></div>`;
+        }
+        return `<div class="review-item" style="border:1px solid #fecaca;border-radius:8px;padding:10px;margin-bottom:8px">
+          <strong>${escapeHtml(item.code)}</strong> ${escapeHtml(item.message)}
+          ${item.row_id ? `<button class="secondary" onclick="focusRow('${escapeHtml(item.row_id)}')">Fix in grid</button>` : ""}</div>`;
+      }).join("");
+      if (!blocking.length) html += `<div style="color:#15803d;font-weight:600">No blocking review items. The workbook can be approved.</div>`;
+      panel.innerHTML = html;
+    }
+
+    async function reviewCall(path, body) {
+      const res = await api(`/processing/jobs/${currentJob.job_id}${path}`, {
+        method: "POST", headers: authHeaders(), body: JSON.stringify(body || {})
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)); return; }
+      renderJob(data);
+    }
+
+    function confirmRow(rowId) {
+      const reason = prompt(`Confirm row ${rowId} matches the source document. Optional note:`, "checked against source");
+      if (reason === null) return;
+      reviewCall(`/rows/${encodeURIComponent(rowId)}/confirm`, { reason });
+    }
+
+    function dismissCandidate(cid) {
+      const reason = prompt("Why is this source region not a transaction? (required)");
+      if (!reason) return;
+      reviewCall(`/candidates/${encodeURIComponent(cid)}/dismiss`, { reason });
+    }
+
+    function promoteCandidate(cid) {
+      const amount = prompt("Amount shown on the source for this row:");
+      if (!amount) return;
+      const date = prompt("Date (DD-MM-YYYY):");
+      if (!date) return;
+      const ref = prompt("Reference / voucher number (or -):", "-") || "-";
+      reviewCall(`/candidates/${encodeURIComponent(cid)}/promote`,
+        { values: { "Amount*": amount, "Transaction Date*": date, "Cheque/Ref No*": ref }, reason: "added from unresolved source region" });
+    }
+
+    async function showCrop(rowId) {
+      const box = document.getElementById("crop_" + rowId);
+      if (!box) return;
+      const res = await api(`/processing/jobs/${currentJob.job_id}/rows/${encodeURIComponent(rowId)}/crop`);
+      if (!res.ok) { box.innerHTML = `<div style="color:var(--muted);font-size:12px">Source crop unavailable; use "View source document".</div>`; return; }
+      const url = URL.createObjectURL(await res.blob());
+      box.innerHTML = `<img src="${url}" alt="source region for ${escapeHtml(rowId)}" style="max-width:100%;border:1px solid var(--line);margin-top:6px">`;
+    }
+
+    function focusRow(rowId) {
+      document.getElementById("gridSearch").value = "";
+      setFilter("all");
+      const cell = document.querySelector(`td[data-row-id="${CSS.escape(rowId)}"]`);
+      if (cell) { cell.scrollIntoView({ behavior: "smooth", block: "center" }); cell.click(); }
     }
 
     function renderMappingCard(mapping) {
@@ -1636,7 +1732,7 @@
       // Filter rows
       const visible = localRows.filter((r) => {
         // Status filter
-        const hasWarning = (r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn);
+        const hasWarning = r._has_warn;
         if (activeFilter === "attention" && !hasWarning) return false;
         if (activeFilter === "verified" && hasWarning) return false;
 
@@ -1650,7 +1746,7 @@
 
       // Update filter counts
       document.getElementById("countAll").textContent = localRows.length;
-      document.getElementById("countAttention").textContent = localRows.filter(r => r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn).length;
+      document.getElementById("countAttention").textContent = localRows.filter(r => r._has_warn).length;
       document.getElementById("countVerified").textContent = localRows.length - parseInt(document.getElementById("countAttention").textContent);
 
       // Render Header with Checkbox for select-all
@@ -1678,8 +1774,11 @@
 
       tbody.innerHTML = visible.map((row) => {
         const actualIdx = localRows.findIndex(r => r._internal_id === row._internal_id);
-        const hasWarn = (row["Amount*"] === "-" || row["Cheque/Ref No*"] === "-" || row._has_warn);
-        const statusBadge = hasWarn ? `<span class="badge warn" title="Needs attention">⚠</span>` : `<span class="badge ok" title="Verified">✓</span>`;
+        const hasWarn = row._has_warn;
+        const statusBadge = row._status === "USER_CONFIRMED"
+          ? `<span class="badge ok" title="Confirmed by reviewer">✓ You</span>`
+          : (hasWarn ? `<span class="badge warn" title="${escapeHtml(row._status)}: open the review panel for evidence">⚠ ${escapeHtml(row._status)}</span>`
+                     : `<span class="badge ok" title="Verified against independent source evidence">✓</span>`);
         const isSelected = selectedRowIds.has(row._internal_id);
 
         let tr = `<tr>
@@ -1760,7 +1859,7 @@
     function getVisibleRowIds() {
       const query = (document.getElementById("gridSearch")?.value || "").toLowerCase().trim();
       return localRows.filter(r => {
-        const hasWarning = (r["Amount*"] === "-" || r["Cheque/Ref No*"] === "-" || r._has_warn);
+        const hasWarning = r._has_warn;
         if (activeFilter === "attention" && !hasWarning) return false;
         if (activeFilter === "verified" && hasWarning) return false;
         if (query) {
@@ -2358,6 +2457,7 @@
       // Clean rows for persistence
       const cleanRows = localRows.map(r => {
         const out = {};
+        if (r._row_id) out._row_id = r._row_id;
         NBH_COLUMNS.forEach(c => out[c] = r[c] || "-");
         return out;
       });
@@ -2366,7 +2466,7 @@
         const res = await api(`/processing/jobs/${currentJob.job_id}/corrections`, {
           method: "POST",
           headers: authHeaders(),
-          body: JSON.stringify({ corrections: { rows: cleanRows } })
+          body: JSON.stringify({ corrections: { rows: cleanRows }, reason: "edited in review grid" })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Save failed.");
@@ -2424,7 +2524,11 @@
           headers: authHeaders()
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Approval failed.");
+        if (!res.ok) {
+          const d = data.detail;
+          if (d && d.blocking) throw new Error(`${d.code}\n\n` + d.blocking.slice(0, 15).map(b => "• " + b).join("\n"));
+          throw new Error(typeof d === "string" ? d : "Approval failed.");
+        }
         renderJob(data);
         alert("✓ Approved! Downloading generated Excel now...");
         downloadExcel(currentJob.job_id, currentJob.output_filename);
@@ -2561,6 +2665,7 @@
       const res = await api(`/processing/jobs/${jobId}`);
       if (res.ok) {
         const job = await res.json();
+        if (ACTIVE_STATES.has(job.overall_status)) { await pollJob(jobId, job); return; }
         renderJob(job);
         document.getElementById("sectionReview").scrollIntoView({ behavior: "smooth" });
       }

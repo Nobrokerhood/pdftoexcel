@@ -88,6 +88,8 @@ def test_multi_row_unmapped_bill_heads_allows_approval_and_generates_excel():
     client, _, drive, _ = client_for(
         data={"MEMBER_RECEIPT": multi_row_data, "VENDOR_INVOICE": {}},
         sheet_records=records(include_mapping=False),
+        # verification is per row_id: both rows must be covered
+        verify_results=[{"overall_status": "PASSED", "rows": {"r0_001": "VERIFIED", "r0_002": "VERIFIED"}}],
     )
     session_token = token(client)
     started = start_job(client, session_token, "MEMBER_RECEIPT")
@@ -127,7 +129,16 @@ def test_genuine_blockers_still_prevent_approval():
     job1 = start_job(unverified_client, token1).json()
     res1 = unverified_client.post(f"/processing/jobs/{job1['job_id']}/approve", headers=headers(token1))
     assert res1.status_code == 409
-    assert res1.json()["detail"] == "VERIFICATION_NOT_PASSED"
+    # Blocked because the unverified row is an unresolved review item (not a
+    # blanket "verification must be PASSED" rule a human could never satisfy).
+    assert res1.json()["detail"]["code"] == "REVIEW_ITEMS_UNRESOLVED"
+    assert any("ROW_NEEDS_REVIEW" in b for b in res1.json()["detail"]["blocking"])
+    # ...and a human confirming the row resolves it.
+    confirmed = unverified_client.post(f"/processing/jobs/{job1['job_id']}/rows/r0_001/confirm",
+                                       headers=headers(token1), json={"reason": "checked against source"})
+    assert confirmed.status_code == 200
+    assert unverified_client.post(f"/processing/jobs/{job1['job_id']}/approve",
+                                  headers=headers(token1)).status_code == 200
 
     # 2. Critical validation failure blocks approval
     invalid = MEMBER_DATA.copy()
@@ -141,4 +152,7 @@ def test_genuine_blockers_still_prevent_approval():
     assert job2["validation_status"] == "BLOCKED"
     res2 = val_client.post(f"/processing/jobs/{job2['job_id']}/approve", headers=headers(token2))
     assert res2.status_code == 409
-    assert res2.json()["detail"] == "VALIDATION_BLOCKED"
+    assert any("AMOUNT_MISSING" in b for b in res2.json()["detail"]["blocking"])
+    # Confirming the row does not bypass an invalid mandatory field.
+    val_client.post(f"/processing/jobs/{job2['job_id']}/rows/r0_001/confirm", headers=headers(token2), json={})
+    assert val_client.post(f"/processing/jobs/{job2['job_id']}/approve", headers=headers(token2)).status_code == 409

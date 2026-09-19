@@ -142,4 +142,5 @@ def test_verification_routing_digital_vs_handwritten():
 def test_gemini_client_instrumentation():
     client = GeminiDocumentClient(settings())
     assert hasattr(client, "call_history")
-    assert isinstance(client.call_history, list)
+    # Bounded: process-wide diagnostics must not grow without limit.
+    assert client.call_history.maxlen is not None

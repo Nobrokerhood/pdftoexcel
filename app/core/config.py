@@ -1,5 +1,6 @@
+import re
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 
 from dotenv import load_dotenv
@@ -52,6 +53,10 @@ class Settings:
     enable_docs: bool = True
     google_shared_drive_id: str | None = None
     session_secret: str | None = None
+    # "background": uploads return immediately and processing runs in a bounded
+    # pool (production). "inline": synchronous (tests only).
+    job_execution: str = field(default_factory=lambda: (os.getenv("JOB_EXECUTION") or "background").strip().lower())
+    job_concurrency: int = 2
 
 
 def _flag(value: str | None) -> bool:
@@ -120,6 +125,8 @@ def get_settings() -> Settings:
         enable_docs=_flag(os.getenv("ENABLE_DOCS", "false" if os.getenv("ENVIRONMENT") == "production" else "true")),
         google_shared_drive_id=(os.getenv("GOOGLE_SHARED_DRIVE_ID") or "").strip() or None,
         session_secret=(os.getenv("SESSION_SECRET") or "").strip() or None,
+        job_execution=(os.getenv("JOB_EXECUTION") or "background").strip().lower(),
+        job_concurrency=int(os.getenv("JOB_CONCURRENCY", "2")),
     )
 
 
@@ -144,10 +151,30 @@ def validate_production_config(settings: Settings) -> list[str]:
         errors.append("SESSION_SECRET is required in production.")
     if settings.allow_dev_login:
         errors.append("ALLOW_DEV_LOGIN must be false in production.")
+    if settings.job_execution != "background":
+        errors.append("JOB_EXECUTION must be 'background' in production.")
     if any(origin.strip() == "*" for origin in settings.cors_allowed_origins):
         errors.append("CORS_ALLOWED_ORIGINS cannot contain '*' wildcard in production.")
 
+    # A developer-machine path in production means the credential or binary will
+    # not exist on the deployed host. Fail at startup rather than at first upload.
+    for name, value in (
+        ("GOOGLE_SERVICE_ACCOUNT_FILE", settings.google_service_account_file),
+        ("POPPLER_PATH", settings.poppler_path),
+    ):
+        if value and _is_windows_path(value):
+            errors.append(
+                f"{name} points at a Windows developer path ({value!r}); production "
+                f"must use a Linux path or the JSON/secret-based equivalent."
+            )
+
     return errors
+
+
+def _is_windows_path(value: str) -> bool:
+    text = str(value).strip()
+    # Drive letter (C:/..., D:\...) or a UNC share.
+    return bool(re.match(r"^[A-Za-z]:[\\/]", text)) or text.startswith("\\\\")
 
 
 def get_config_diagnostic(settings: Settings) -> dict[str, bool]:

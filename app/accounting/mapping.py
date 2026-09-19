@@ -68,91 +68,54 @@ class MappingMasterService:
         return exact_match or alias_match
 
     def map_data(self, purpose: str, extracted_data: dict[str, Any]) -> MappingResult:
+        """Map bank / bill head (and vendor) values to NBH codes via Mapping_Master.
+
+        * Rows are addressed by _row_id; reviewer-edited fields are never changed.
+        * An unmapped value is reported (mapping_missing) and the SOURCE value is
+          exported. A missing mapping never blocks approval.
+        """
+        import copy
+
         purpose = purpose.upper()
-        mapped = dict(extracted_data)
+        mapped = copy.deepcopy(extracted_data)
         missing: list[MappingMissingItem] = []
 
-        if purpose in {MEMBER_RECEIPT, PETTY_CASH_REGISTER, "BANK_STATEMENT", "SOCIETY_MEMBER_LEDGER"}:
-            # Handle multi-row mapping
-            rows = mapped.get("rows")
-            if isinstance(rows, list) and len(rows) > 0:
-                mapped_rows = []
-                for idx, row in enumerate(rows, start=1):
-                    row_copy = dict(row)
-                    bank = row_copy.get("Society Bank Name/Bank code(Given to you by nobrokerhood)*")
-                    if not _is_empty_or_dash(bank):
-                        bank_code = self.lookup(purpose, "BANK", bank)
-                        if bank_code:
-                            row_copy["Society Bank Name/Bank code(Given to you by nobrokerhood)*"] = bank_code
-                        elif not any(m.type == "BANK" and m.source_value == str(bank) for m in missing):
-                            missing.append(MappingMissingItem(type="BANK", source_value=str(bank), rows=[idx]))
+        def note_missing(kind: str, value: str, row_id: str | None):
+            for item in missing:
+                if item.type == kind and item.source_value == value:
+                    if row_id:
+                        item.rows.append(len(item.rows) + 1)
+                    return
+            missing.append(MappingMissingItem(type=kind, source_value=value, rows=[1] if row_id else [],
+                                              reason="no active Mapping_Master entry; source value exported"))
 
-                    bill_head = row_copy.get("Bill Head*")
-                    if not _is_empty_or_dash(bill_head):
-                        bill_head_code = self.lookup(purpose, "BILL_HEAD", bill_head)
-                        if bill_head_code:
-                            row_copy["Bill Head*"] = bill_head_code
-                        elif not any(m.type == "BILL_HEAD" and m.source_value == str(bill_head) for m in missing):
-                            missing.append(MappingMissingItem(type="BILL_HEAD", source_value=str(bill_head), rows=[idx]))
-
-                    mapped_rows.append(row_copy)
-                mapped["rows"] = mapped_rows
-
-            # Also check top-level fields for single-record receipts
-            bank = extracted_data.get("bank_name_or_code")
-            if not _is_empty_or_dash(bank):
-                bank_code = self.lookup(purpose, "BANK", bank)
-                if bank_code:
-                    mapped["bank_name_or_code"] = bank_code
-                elif not any(m.type == "BANK" and m.source_value == str(bank) for m in missing):
-                    missing.append(MappingMissingItem(type="BANK", source_value=str(bank)))
-
-            bill_head = extracted_data.get("bill_head")
-            if not _is_empty_or_dash(bill_head):
-                bill_head_code = self.lookup(purpose, "BILL_HEAD", bill_head)
-                if bill_head_code:
-                    mapped["bill_head"] = bill_head_code
-                elif not any(m.type == "BILL_HEAD" and m.source_value == str(bill_head) for m in missing):
-                    missing.append(MappingMissingItem(type="BILL_HEAD", source_value=str(bill_head)))
-
-            tower = str(extracted_data.get("tower") or "").strip()
-            flat = str(extracted_data.get("flat") or "").strip()
-            tower_flat = f"{tower} {flat}".strip()
-            if not _is_empty_or_dash(tower_flat) and tower_flat != "-":
-                flat_code = self.lookup(purpose, "TOWER_FLAT", tower_flat)
-                if flat_code:
-                    mapped["flat"] = flat_code
-
-        elif purpose == VENDOR_INVOICE:
-            vendor_code = extracted_data.get("vendor_code")
-            vendor_name = extracted_data.get("vendor_name")
-            if not _is_empty_or_dash(vendor_name) and _is_empty_or_dash(vendor_code):
-                v_code = self.lookup(purpose, "VENDOR", vendor_name)
-                if v_code:
-                    mapped["vendor_code"] = v_code
+        for row in mapped.get("rows") or []:
+            if not isinstance(row, dict):
+                continue
+            edited = set(row.get("_edited_fields") or [])
+            for column, kind in (("Society Bank Name/Bank code(Given to you by nobrokerhood)*", "BANK"),
+                                 ("Bill Head*", "BILL_HEAD")):
+                if column in edited:
+                    continue
+                value = row.get(column)
+                if _is_empty_or_dash(value):
+                    continue
+                code = self.lookup(purpose, kind, value)
+                if code:
+                    row[column] = code
                 else:
-                    missing.append(MappingMissingItem(type="VENDOR", source_value=str(vendor_name)))
+                    note_missing(kind, str(value), row.get("_row_id"))
 
-            mapped_expenses = []
-            for expense in extracted_data.get("expenses", []):
-                expense = dict(expense)
-                desc = expense.get("expense_description")
-                if _is_empty_or_dash(expense.get("expense_code")) and not _is_empty_or_dash(desc):
-                    code = self.lookup(purpose, "EXPENSE", str(desc))
-                    if code:
-                        expense["expense_code"] = code
-                    else:
-                        missing.append(
-                            MappingMissingItem(
-                                type="EXPENSE",
-                                source_value=str(desc),
-                            )
-                        )
-                mapped_expenses.append(expense)
-            mapped["expenses"] = mapped_expenses
+        if purpose == VENDOR_INVOICE:
+            detail = mapped.get("vendor_detail") or {}
+            name = detail.get("vendor_name") or mapped.get("vendor_name")
+            if not _is_empty_or_dash(name):
+                code = self.lookup(purpose, "VENDOR", name)
+                if code:
+                    detail["vendor_code"] = code
+                    mapped["vendor_detail"] = detail
+                else:
+                    note_missing("VENDOR", str(name), None)
 
-        return MappingResult(
-            status="NEEDS_MAPPING" if missing else "MAPPED",
-            mapped_data=mapped,
-            missing=missing,
-        )
+        mapped["mapping_missing"] = [m.model_dump() for m in missing]
+        return MappingResult(status="NEEDS_MAPPING" if missing else "MAPPED", mapped_data=mapped, missing=missing)

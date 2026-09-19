@@ -190,7 +190,8 @@ def test_valid_pdf_upload_runs_workflow_to_review():
 def test_drive_upload_failure_returns_safe_message_and_keeps_detail_in_job(missing_poppler_dir):
     client, _, sheets = processing_client(missing_poppler_dir, drive=FailingDriveService())
 
-    response = upload(client, b"\x89PNG not checked here", "receipt.png", "image/png")
+    from tests.conftest import png_bytes
+    response = upload(client, png_bytes(), "receipt.png", "image/png")
 
     assert response.status_code == 502
     assert "Google Drive upload failed" in response.json()["detail"]
@@ -206,6 +207,7 @@ def test_legacy_converter_reports_missing_poppler(missing_poppler_dir):
 
     response = client.post(
         "/export-to-excel/",
+        headers=headers(token(client)),  # legacy tools require a session
         files={"file": ("table.pdf", sample_pdf(), "application/pdf")},
     )
 

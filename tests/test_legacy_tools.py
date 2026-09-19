@@ -14,6 +14,20 @@ from main import app
 client = TestClient(app)
 
 
+def _auth_headers(test_client) -> dict:
+    """Legacy converters spend Gemini quota, so they now require a session."""
+    from app.auth.user_master import AuthorizedUser
+    session = test_client.app.state.session_service.create_session(
+        AuthorizedUser(email="tester@nobroker.in", name="Tester", role="USER", active=True))
+    return {"Authorization": f"Bearer {session.token}"}
+
+
+def test_legacy_tools_require_a_session():
+    for path in ("/split-pdf/", "/process-document/", "/export-to-excel/"):
+        response = client.post(path, files={"file": ("sample.pdf", _sample_pdf(1), "application/pdf")})
+        assert response.status_code == 401, path
+
+
 def _sample_pdf(page_count: int = 3) -> bytes:
     writer = PdfWriter()
     for _ in range(page_count):
@@ -40,6 +54,7 @@ def test_health_route_imports_without_external_secrets():
 def test_split_pdf_returns_zip_parts_without_external_services():
     response = client.post(
         "/split-pdf/",
+        headers=_auth_headers(client),
         params={"pages_per_file": 2},
         files={"file": ("sample.pdf", _sample_pdf(3), "application/pdf")},
     )
@@ -59,6 +74,7 @@ def test_split_pdf_returns_zip_parts_without_external_services():
 def test_split_pdf_rejects_non_pdf_upload():
     response = client.post(
         "/split-pdf/",
+        headers=_auth_headers(client),
         files={"file": ("sample.txt", b"hello", "text/plain")},
     )
 
@@ -69,6 +85,7 @@ def test_split_pdf_rejects_non_pdf_upload():
 def test_split_pdf_rejects_invalid_page_group_size():
     response = client.post(
         "/split-pdf/",
+        headers=_auth_headers(client),
         params={"pages_per_file": 0},
         files={"file": ("sample.pdf", _sample_pdf(1), "application/pdf")},
     )
@@ -82,6 +99,7 @@ def test_gemini_endpoints_report_missing_configuration():
     unconfigured = TestClient(create_app(settings=replace(get_settings(), gemini_api_key=None)))
     response = unconfigured.post(
         "/process-document/",
+        headers=_auth_headers(unconfigured),
         files={"file": ("sample.png", _sample_png(), "image/png")},
     )
 

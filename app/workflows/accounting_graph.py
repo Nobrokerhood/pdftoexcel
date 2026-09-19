@@ -1,56 +1,60 @@
+"""Accounting workflow: prepare -> extract -> verify -> [repair once] -> map ->
+validate -> human_review; then human approval -> export -> Drive.
+
+Single source of truth: `job.extracted_data` is the current document (rows,
+evidence, ledger, reconciliation). Mapping and reviewer actions update it in
+place; nothing keeps a second diverging copy.
+
+Approval requires every blocking review item to be resolved (by the evidence or
+by a human), a balanced source-candidate ledger, and valid mandatory fields.
+It does NOT require the model verifier to have said PASSED: a human who has
+confirmed each flagged row has resolved it.
+"""
+
 import logging
 
 from langgraph.graph import END, START, StateGraph
-from pydantic import ValidationError
 
 from app.accounting.mapping import MappingMasterService
-from app.accounting.output import TemplateOutputGenerator
-from app.accounting.schemas import VerificationResult
+from app.accounting.output import OutputGenerationError, TemplateOutputGenerator
+from app.accounting.reconciliation import AccountingReconciliationService
 from app.accounting.validation import AccountingValidationService
 from app.agents.extractor import ExtractionAgent
-from app.agents.repair import RepairAgent
-from app.agents.verifier import VerificationAgent
+from app.agents.repair import RepairAgent, repair_requests
+from app.agents.verifier import VerificationAgent, apply_verification
 from app.audit.activity import AuditLogService
 from app.core.config import Settings
-from app.core.errors import ExternalServiceUnavailableError
 from app.google.drive_service import GoogleDriveError
 from app.processing.jobs import ProcessingJob
 from app.processing.log_lifecycle import ProcessingLifecycleService
-from app.workflows.routing import (
-    route_after_mapping,
-    route_after_validation,
-    route_after_verification,
-)
 from app.workflows.state import AccountingWorkflowState
-
 
 logger = logging.getLogger(__name__)
 
-MALFORMED_VERIFICATION_MESSAGE = (
-    "AI verification returned a result in an unexpected format, so the extracted "
-    "data could not be verified. Please re-process the document."
-)
-MALFORMED_REPAIR_MESSAGE = (
-    "AI repair returned data in an unexpected format. Please re-process the document."
-)
+
+class ApprovalBlockedError(ValueError):
+    def __init__(self, code: str, details: list[str] | None = None):
+        super().__init__(code)
+        self.code = code
+        self.details = details or []
+
+
+def _warnings_of(data: dict) -> list[str]:
+    out = []
+    if data.get("provider_note"):
+        out.append(data["provider_note"])
+    arb = data.get("arbitration") or {}
+    for failure in arb.get("failures") or []:
+        out.append(f"arbitration: {failure}")
+    return out
 
 
 class AccountingWorkflow:
-    def __init__(
-        self,
-        settings: Settings,
-        extraction_agent: ExtractionAgent,
-        verification_agent: VerificationAgent,
-        repair_agent: RepairAgent,
-        mapping_service: MappingMasterService,
-        validation_service: AccountingValidationService,
-        output_generator: TemplateOutputGenerator,
-        template_registry_service,
-        folder_router_service,
-        drive_service,
-        lifecycle_service: ProcessingLifecycleService,
-        audit_log_service: AuditLogService,
-    ):
+    def __init__(self, settings: Settings, extraction_agent: ExtractionAgent, verification_agent: VerificationAgent,
+                 repair_agent: RepairAgent, mapping_service: MappingMasterService,
+                 validation_service: AccountingValidationService, output_generator: TemplateOutputGenerator,
+                 template_registry_service, folder_router_service, drive_service,
+                 lifecycle_service: ProcessingLifecycleService, audit_log_service: AuditLogService):
         self.settings = settings
         self.extraction_agent = extraction_agent
         self.verification_agent = verification_agent
@@ -66,266 +70,229 @@ class AccountingWorkflow:
         self.graph = self._build_graph()
         self._jobs: dict[str, ProcessingJob] = {}
 
+    # -- graph ------------------------------------------------------------------
     def _build_graph(self):
         graph = StateGraph(AccountingWorkflowState)
-        graph.add_node("prepare", self._prepare)
-        graph.add_node("extract", self._extract)
-        graph.add_node("verify", self._verify)
-        graph.add_node("repair", self._repair)
-        graph.add_node("map", self._map)
-        graph.add_node("validate", self._validate)
-        graph.add_node("human_review", self._human_review)
-
+        for name in ("prepare", "extract", "verify", "repair", "map", "validate", "human_review"):
+            graph.add_node(name, getattr(self, f"_{name}"))
         graph.add_edge(START, "prepare")
         graph.add_edge("prepare", "extract")
-        graph.add_edge("extract", "verify")
-        graph.add_conditional_edges(
-            "verify",
-            route_after_verification,
-            {"map": "map", "repair": "repair", "human_review": "human_review"},
-        )
+        graph.add_conditional_edges("extract", self._after_extract, {"verify": "verify", "human_review": "human_review"})
+        graph.add_conditional_edges("verify", self._after_verify, {"repair": "repair", "map": "map"})
         graph.add_edge("repair", "verify")
-        graph.add_conditional_edges(
-            "map",
-            route_after_mapping,
-            {"validate": "validate", "human_review": "human_review"},
-        )
-        graph.add_conditional_edges(
-            "validate",
-            route_after_validation,
-            {"human_review": "human_review"},
-        )
+        graph.add_edge("map", "validate")
+        graph.add_edge("validate", "human_review")
         graph.add_edge("human_review", END)
         return graph.compile()
 
     def run_until_review(self, job: ProcessingJob) -> ProcessingJob:
         self._jobs[job.job_id] = job
-        state: AccountingWorkflowState = {
-            "workflow_id": job.job_id,
-            "job_id": job.job_id,
-            "session_id": job.session_id,
-            "user_email": job.user_email,
-            "source_filename": job.source_filename,
-            "source_drive_file_id": job.source_drive_file_id,
-            "source_type": job.source_content_type,
-            "selected_purpose": job.purpose,
-            "template_code": job.template_code,
-            "input_folder_id": job.source_folder_id,
-            "review_folder_id": job.review_folder_id,
-            "completed_folder_id": job.completed_folder_id,
-            "output_folder_id": job.output_folder_id,
-            "extraction_attempt": job.extraction_attempt,
-            "max_retries": self.settings.ai_verification_max_retries,
-            "overall_status": job.overall_status,
-            "current_step": job.current_step,
-        }
-        final_state = self.graph.invoke(state)
-        self._sync_job(job, final_state)
+        try:
+            self.graph.invoke({"job_id": job.job_id, "repair_attempts": 0})
+        finally:
+            self._jobs.pop(job.job_id, None)  # never retain finished jobs here (memory)
         return job
 
-    def _job(self, state: AccountingWorkflowState) -> ProcessingJob:
+    def _job(self, state) -> ProcessingJob:
         return self._jobs[state["job_id"]]
 
     def _template(self, job: ProcessingJob):
         return self.template_registry_service.get_active_template(job.purpose)
 
-    def _sync_job(self, job: ProcessingJob, state: AccountingWorkflowState):
-        job.extraction_attempt = state.get("extraction_attempt", job.extraction_attempt)
-        job.extracted_data = state.get("extracted_data", job.extracted_data)
-        job.verification_result = state.get("verification_result", job.verification_result)
-        job.verification_status = state.get("verification_status", job.verification_status)
-        job.mapping_result = state.get("mapping_result", job.mapping_result)
-        job.mapping_status = state.get("mapping_status", job.mapping_status)
-        job.validation_result = state.get("validation_result", job.validation_result)
-        job.validation_status = state.get("validation_status", job.validation_status)
-        job.human_status = state.get("human_status", job.human_status)
-        job.overall_status = state.get("overall_status", job.overall_status)
-        job.current_step = state.get("current_step", job.current_step)
-        job.last_error = state.get("last_error", job.last_error)
+    def _activity(self, job: ProcessingJob, action: str, status: str = "OK", detail: str = ""):
+        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, action, job.purpose,
+                                        job.source_drive_file_id, job.output_drive_file_id, status, detail)
 
-    def _fail_step(self, job: ProcessingJob, step: str, status_field: str, action: str, exc: Exception):
-        # An unavailable AI service ends the run in FAILED; the graph routes it to human review.
-        message = str(exc)
-        setattr(job, status_field, "FAILED")
-        job.overall_status = "FAILED"
-        job.last_error = message
-        self.lifecycle_service.update(job, **{status_field: "FAILED"}, current_step=step, overall_status="FAILED", last_error=message)
-        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, action, job.purpose, job.source_drive_file_id, "", "FAIL", message)
-        return {status_field: "FAILED", "current_step": step, "overall_status": "FAILED", "last_error": message}
+    def _persist(self, job: ProcessingJob, **fields):
+        self.lifecycle_service.update(job, **fields)
 
-    def _prepare(self, state: AccountingWorkflowState):
+    # -- nodes ------------------------------------------------------------------
+    def _prepare(self, state):
         job = self._job(state)
-        job.current_step = "PREPARE"
-        job.overall_status = "PROCESSING"
-        self.lifecycle_service.update(job, current_step="PREPARE", overall_status="PROCESSING")
-        return {"current_step": "PREPARE", "overall_status": "PROCESSING"}
+        self._persist(job, current_step="PREPARE", overall_status="PROCESSING")
+        return {}
 
-    def _extract(self, state: AccountingWorkflowState):
+    def _extract(self, state):
         job = self._job(state)
-        template = self._template(job)
-        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "EXTRACTION_STARTED", job.purpose, job.source_drive_file_id, "", "OK", "")
+        stage = job.stage_start("OCR_AND_EXTRACTION", "Reading the document (OCR engines, AI extraction, arbitration)")
+        self._persist(job, current_step="EXTRACTING")
+        self._activity(job, "EXTRACTION_STARTED")
         try:
-            data = self.extraction_agent.extract(job.source_bytes, job.purpose, template)
-            job.extraction_attempt += 1
-            job.extracted_data = data
-            job.extraction_status = "COMPLETED"
-            self.lifecycle_service.update(job, extraction_status="COMPLETED", current_step="EXTRACTING")
-            self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "EXTRACTION_COMPLETED", job.purpose, job.source_drive_file_id, "", "OK", "")
-            return {
-                "extraction_attempt": job.extraction_attempt,
-                "extracted_data": data,
-                "current_step": "EXTRACTING",
-            }
+            data = self.extraction_agent.extract(job.source_bytes, job.purpose, self._template(job))
         except Exception as exc:
+            message = str(exc) or type(exc).__name__
+            job.stage_end(stage, "FAILED", "Extraction failed", errors=[message])
             job.extraction_status = "FAILED"
-            job.overall_status = "FAILED"
-            job.last_error = str(exc)
-            self.lifecycle_service.update(job, extraction_status="FAILED", overall_status="FAILED", last_error=str(exc))
-            self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "EXTRACTION_FAILED", job.purpose, job.source_drive_file_id, "", "FAIL", str(exc))
-            return {"current_step": "EXTRACTING", "overall_status": "FAILED", "last_error": str(exc)}
+            job.last_error = message
+            self._persist(job, extraction_status="FAILED", overall_status="FAILED", last_error=message)
+            self._activity(job, "EXTRACTION_FAILED", "FAIL", message)
+            return {"failed": True}
+        job.extracted_data = data
+        job.extraction_attempt += 1
+        job.extraction_status = "COMPLETED"
+        job.extraction_provider = data.get("_extraction_provider") or "UNKNOWN"
+        ledger = data.get("candidate_ledger") or {}
+        timing = data.get("timing_ms") or {}
+        job.stage_end(stage, "COMPLETED",
+                      f"{len(data.get('rows') or [])} transaction row(s); {ledger.get('equation', '')}".strip("; "),
+                      warnings=_warnings_of(data), provider=job.extraction_provider)
+        if timing:
+            stage["timing_ms"] = timing
+        self._persist(job, extraction_status="COMPLETED", extraction_provider=job.extraction_provider)
+        self._activity(job, "EXTRACTION_COMPLETED")
+        return {"failed": False}
 
-    def _verify(self, state: AccountingWorkflowState):
+    def _after_extract(self, state) -> str:
+        return "human_review" if state.get("failed") else "verify"
+
+    def _verify(self, state):
         job = self._job(state)
-        if job.overall_status == "FAILED":
-            # Extraction failed, so verification never ran; keep its status as-is.
-            return {"verification_status": job.verification_status}
-        template = self._template(job)
-        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "AI_VERIFICATION_STARTED", job.purpose, job.source_drive_file_id, "", "OK", "")
+        stage = job.stage_start("VERIFICATION", "Verifying every row by row_id against source evidence",
+                                attempt=state.get("repair_attempts", 0) + 1)
+        self._persist(job, current_step="VERIFYING")
+        self._activity(job, "AI_VERIFICATION_STARTED")
         try:
-            result = self.verification_agent.verify(job.source_bytes, job.purpose, template, job.extracted_data)
-        except ExternalServiceUnavailableError as exc:
-            return self._fail_step(job, "VERIFYING", "verification_status", "AI_VERIFICATION_FAILED", exc)
-        except ValidationError as exc:
-            logger.warning("Malformed verification result for job %s: %s", job.job_id, exc)
-            return self._fail_step(job, "VERIFYING", "verification_status", "AI_VERIFICATION_FAILED", ValueError(MALFORMED_VERIFICATION_MESSAGE))
+            result = self.verification_agent.verify(job.source_bytes, job.purpose, self._template(job), job.extracted_data)
+        except Exception as exc:
+            # Verification failure is never PASSED: rows stay unverified for review.
+            from app.agents.verifier import adapt_verification
+            result = adapt_verification({"notes": [f"verification unavailable: {type(exc).__name__}"]}, job.extracted_data)
+            job.stage_end(stage, "NEEDS_REVIEW", "Verification unavailable; rows require review",
+                          errors=[type(exc).__name__])
+        else:
+            job.stage_end(stage, "COMPLETED" if result.overall_status == "PASSED" else "NEEDS_REVIEW",
+                          f"{sum(1 for s in result.rows.values() if s == 'VERIFIED')}/{len(result.rows)} rows verified",
+                          warnings=result.notes, provider=result.provider)
+        apply_verification(job.extracted_data, result)
         job.verification_result = result.model_dump(mode="json")
         job.verification_status = result.overall_status
-        self.lifecycle_service.update(job, verification_status=result.overall_status, current_step="VERIFYING")
-        event = "AI_VERIFICATION_PASSED" if result.overall_status == "PASSED" else "AI_VERIFICATION_FAILED"
-        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, event, job.purpose, job.source_drive_file_id, "", "OK" if result.overall_status == "PASSED" else "FAIL", "")
-        return {
-            "verification_result": job.verification_result,
-            "verification_status": result.overall_status,
-            "extraction_attempt": job.extraction_attempt,
-            "current_step": "VERIFYING",
-        }
+        job.verification_provider = result.provider
+        self._persist(job, verification_status=result.overall_status, verification_provider=result.provider)
+        self._activity(job, "AI_VERIFICATION_PASSED" if result.overall_status == "PASSED" else "AI_VERIFICATION_FAILED",
+                       "OK" if result.overall_status == "PASSED" else "FAIL")
+        return {}
 
-    def _repair(self, state: AccountingWorkflowState):
+    def _after_verify(self, state) -> str:
         job = self._job(state)
-        template = self._template(job)
+        if job.verification_status == "PASSED" or state.get("repair_attempts", 0) >= 1:
+            return "map"
+        if self.settings.ai_verification_max_retries <= 0:
+            return "map"
+        return "repair" if repair_requests(job.extracted_data) else "map"
+
+    def _repair(self, state):
+        job = self._job(state)
+        stage = job.stage_start("REPAIR", "Field-level repair of flagged fields")
         try:
-            repaired = self.repair_agent.repair(
-                job.source_bytes,
-                job.purpose,
-                template,
-                job.extracted_data,
-                VerificationResult(**job.verification_result),
-            )
-        except ExternalServiceUnavailableError as exc:
-            return self._fail_step(job, "REPAIR_EXTRACTION", "extraction_status", "AI_REPAIR_FAILED", exc)
-        except ValidationError as exc:
-            logger.warning("Malformed repair result for job %s: %s", job.job_id, exc)
-            return self._fail_step(job, "REPAIR_EXTRACTION", "extraction_status", "AI_REPAIR_FAILED", ValueError(MALFORMED_REPAIR_MESSAGE))
-        job.extraction_attempt += 1
-        job.extracted_data = repaired
-        self.lifecycle_service.update(job, extraction_status="REPAIRED", current_step="REPAIR_EXTRACTION")
-        return {
-            "extraction_attempt": job.extraction_attempt,
-            "extracted_data": repaired,
-            "current_step": "REPAIR_EXTRACTION",
-        }
+            repaired = self.repair_agent.repair(job.source_bytes, job.purpose, self._template(job), job.extracted_data)
+            log = repaired.get("repair_log") or {}
+            job.extracted_data = repaired
+            job.extracted_data["reconciliation"] = AccountingReconciliationService().reconcile(repaired, job.purpose)
+            job.stage_end(stage, "COMPLETED",
+                          f"{len(log.get('applied') or [])} field(s) proposed, {len(log.get('rejected') or [])} rejected")
+        except Exception as exc:
+            job.stage_end(stage, "SKIPPED", "Repair unavailable; flagged fields stay for human review",
+                          errors=[type(exc).__name__])
+        self._persist(job, current_step="REPAIR")
+        return {"repair_attempts": state.get("repair_attempts", 0) + 1}
 
-    def _map(self, state: AccountingWorkflowState):
+    def _map(self, state):
         job = self._job(state)
-        result = self.mapping_service.map_data(job.purpose, job.extracted_data)
-        job.mapping_result = result.model_dump(mode="json")
-        job.mapping_status = "NEEDS_MAPPING" if result.status == "NEEDS_MAPPING" else "MAPPED"
-        if result.status == "NEEDS_MAPPING":
-            job.overall_status = "NEEDS_REVIEW"
-            self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "MAPPING_REQUIRED", job.purpose, job.source_drive_file_id, "", "NEEDS_REVIEW", "")
-        self.lifecycle_service.update(job, mapping_status=job.mapping_status, current_step="MAPPING", overall_status=job.overall_status)
-        return {
-            "mapping_result": job.mapping_result,
-            "mapping_status": job.mapping_status,
-            "current_step": "MAPPING",
-            "overall_status": job.overall_status,
-        }
+        stage = job.stage_start("MAPPING", "Mapping bank / bill head / vendor codes")
+        try:
+            result = self.mapping_service.map_data(job.purpose, job.extracted_data)
+            job.extracted_data = result.mapped_data
+            job.mapping_status = result.status
+            job.mapping_result = {"status": result.status, "missing": [m.model_dump() for m in result.missing]}
+            job.stage_end(stage, "COMPLETED" if result.status == "MAPPED" else "NEEDS_REVIEW",
+                          f"{len(result.missing)} unmapped value(s); source values will be exported" if result.missing
+                          else "all values mapped")
+        except Exception as exc:
+            job.mapping_status = "NEEDS_MAPPING"
+            job.mapping_result = {"status": "NEEDS_MAPPING", "missing": [], "error": type(exc).__name__}
+            job.stage_end(stage, "NEEDS_REVIEW", "Mapping unavailable; source values will be exported",
+                          errors=[type(exc).__name__])
+        self._persist(job, mapping_status=job.mapping_status, current_step="MAPPING")
+        return {}
 
-    def _validate(self, state: AccountingWorkflowState):
+    def _validate(self, state):
         job = self._job(state)
-        data = job.mapping_result.get("mapped_data") or job.extracted_data
-        result = self.validation_service.validate(job.purpose, data)
+        stage = job.stage_start("VALIDATION", "Deterministic accounting validation and reconciliation")
+        result = self.validation_service.validate(job.purpose, job.extracted_data)
         job.validation_result = result.model_dump(mode="json")
         job.validation_status = result.status
-        self.lifecycle_service.update(job, validation_status=result.status, current_step="VALIDATING")
-        return {
-            "validation_result": job.validation_result,
-            "validation_status": result.status,
-            "current_step": "VALIDATING",
-        }
+        blocking = sum(1 for i in result.issues if i.severity == "CRITICAL")
+        job.stage_end(stage, "COMPLETED" if result.status == "PASSED" else "NEEDS_REVIEW",
+                      f"{blocking} blocking, {len(result.issues) - blocking} advisory issue(s)")
+        self._persist(job, validation_status=result.status, current_step="VALIDATING")
+        return {}
 
-    def _human_review(self, state: AccountingWorkflowState):
+    def _human_review(self, state):
         job = self._job(state)
         job.human_status = "NEEDS_REVIEW"
-        if job.overall_status != "FAILED":
+        if job.overall_status != "FAILED" and job.extraction_status != "FAILED":
             job.overall_status = "NEEDS_REVIEW"
+            entry = job.stage_start("HUMAN_REVIEW", "Waiting for reviewer")
+            entry["status"] = "WAITING"
+        else:
+            job.overall_status = "FAILED"
         job.current_step = "HUMAN_REVIEW"
-        self.lifecycle_service.update(job, human_status="NEEDS_REVIEW", overall_status=job.overall_status, current_step="HUMAN_REVIEW")
+        self._persist(job, human_status="NEEDS_REVIEW", overall_status=job.overall_status, current_step="HUMAN_REVIEW")
+        return {}
 
-        audit_summary = {
-            "document_classification": job.extracted_data.get("document_type", job.purpose) if isinstance(job.extracted_data, dict) else job.purpose,
-            "gemini_extraction_status": job.extraction_status,
-            "verification_status": job.verification_status,
-            "number_of_extracted_rows": len(job.extracted_data.get("rows", [])) if isinstance(job.extracted_data, dict) else 0,
-            "validation_status": job.validation_status,
-            "overall_status": job.overall_status,
-        }
-        logger.info("ACCURACY_AUDIT [job=%s, purpose=%s]: %s", job.job_id, job.purpose, audit_summary)
+    # -- human actions ----------------------------------------------------------
+    def revalidate(self, job: ProcessingJob):
+        job.extracted_data["reconciliation"] = AccountingReconciliationService().reconcile(job.extracted_data, job.purpose)
+        result = self.validation_service.validate(job.purpose, job.extracted_data)
+        job.validation_result = result.model_dump(mode="json")
+        job.validation_status = result.status
+        return result
 
-        return {
-            "human_status": "NEEDS_REVIEW",
-            "overall_status": job.overall_status,
-            "current_step": "HUMAN_REVIEW",
-        }
+    def approval_blockers(self, job: ProcessingJob) -> list[str]:
+        result = self.revalidate(job)
+        return [f"{i.code}: {i.message}" for i in result.issues if i.severity == "CRITICAL" and not i.resolution]
 
     def approve_and_complete(self, job: ProcessingJob) -> ProcessingJob:
-        # Only a job waiting in human review, with passed verification and
-        # confirmed mappings, may produce output. FAILED, REJECTED and COMPLETED
-        # jobs and jobs that never reached mapping are refused.
         if job.overall_status != "NEEDS_REVIEW":
-            raise ValueError("JOB_NOT_AWAITING_REVIEW")
-        if job.verification_status != "PASSED":
-            raise ValueError("VERIFICATION_NOT_PASSED")
-        # Mapping is optional/recommended, but no longer a hard blocker for Excel generation
-        data = (job.mapping_result.get("mapped_data") if isinstance(job.mapping_result, dict) else None) or job.extracted_data
-        validation = self.validation_service.validate(job.purpose, data)
-        job.validation_result = validation.model_dump(mode="json")
-        job.validation_status = validation.status
-        if validation.status != "PASSED":
-            raise ValueError("VALIDATION_BLOCKED")
+            raise ApprovalBlockedError("JOB_NOT_AWAITING_REVIEW")
+        blockers = self.approval_blockers(job)
+        if blockers:
+            raise ApprovalBlockedError("REVIEW_ITEMS_UNRESOLVED", blockers)
 
-        template = self._template(job)
+        for entry in job.stage_trace:
+            if entry.get("stage") == "HUMAN_REVIEW" and entry.get("status") == "WAITING":
+                job.stage_end(entry, "COMPLETED", f"Approved by {job.user_email}")
         job.human_status = "APPROVED"
-        self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "HUMAN_APPROVED", job.purpose, job.source_drive_file_id, "", "OK", "")
-        job.output_filename, job.output_bytes = self.output_generator.generate_xlsx(
-            job.purpose, template, data, job.job_id
-        )
-        self.lifecycle_service.update(job, human_status="APPROVED", overall_status="GENERATING_OUTPUT", current_step="GENERATING_OUTPUT")
+        self._activity(job, "HUMAN_APPROVED")
+        export = job.stage_start("EXPORT", "Generating the NBH workbook")
+        try:
+            job.output_filename, job.output_bytes = self.output_generator.generate_xlsx(
+                job.purpose, self._template(job), job.extracted_data, job.job_id,
+                audit=[c.model_dump() for c in job.human_corrections])
+        except OutputGenerationError as exc:
+            job.stage_end(export, "FAILED", "Workbook generation refused", errors=[str(exc)])
+            job.human_status = "NEEDS_REVIEW"
+            raise ApprovalBlockedError("OUTPUT_INVALID", [str(exc)]) from exc
+        job.stage_end(export, "COMPLETED", job.output_filename)
+        self._persist(job, human_status="APPROVED", overall_status="GENERATING_OUTPUT", current_step="GENERATING_OUTPUT")
+
+        upload = job.stage_start("DRIVE_UPLOAD", "Uploading the workbook to Output and moving the source to Completed")
         try:
             job.output_drive_file_id = self.drive_service.upload_file(
-                job.output_filename,
-                job.output_bytes,
-                job.output_folder_id,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            self.audit_log_service.activity(job.session_id, job.user_email, job.job_id, "EXCEL_GENERATED", job.purpose, job.source_drive_file_id, job.output_drive_file_id, "OK", job.output_filename)
-            self.drive_service.move_file(job.source_drive_file_id, job.completed_folder_id)
-            job.overall_status = "COMPLETED"
-            job.current_step = "COMPLETE"
-            self.lifecycle_service.update(job, output_filename=job.output_filename, output_drive_file_id=job.output_drive_file_id, overall_status="COMPLETED", current_step="COMPLETE")
+                job.output_filename, job.output_bytes, job.output_folder_id,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self._activity(job, "EXCEL_GENERATED", detail=job.output_filename)
+            if job.source_drive_file_id:
+                self.drive_service.move_file(job.source_drive_file_id, job.completed_folder_id)
         except GoogleDriveError as exc:
+            job.stage_end(upload, "FAILED", "Drive upload failed; the workbook is still downloadable", errors=[str(exc)])
             job.overall_status = "FAILED"
             job.last_error = str(exc)
-            self.lifecycle_service.update(job, overall_status="FAILED", last_error=str(exc))
+            self._persist(job, overall_status="FAILED", last_error=str(exc))
             raise
+        job.stage_end(upload, "COMPLETED", "Workbook in Output; source moved to Completed")
+        job.overall_status = "COMPLETED"
+        job.current_step = "COMPLETE"
+        self._persist(job, output_filename=job.output_filename, output_drive_file_id=job.output_drive_file_id,
+                      overall_status="COMPLETED", current_step="COMPLETE")
         return job

@@ -1,10 +1,35 @@
 services:
   - type: web
     name: pdftoexcel
+    # Native Python runtime (the existing service). Render's native image already
+    # provides poppler; apt-get is not available here, so the build does not try it.
+    # The Dockerfile describes the same stack for container deployments.
     env: python
-    buildCommand: |
-      apt-get update && apt-get install -y poppler-utils libgl1 libglib2.0-0
-      pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    pythonVersion: "3.13"
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    # One worker: job state and sessions are in-process; concurrency is the
+    # bounded background job pool.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --no-access-log
+    # 503 while a required capability (OCR engine, PDF renderer, Gemini, Drive,
+    # Sheets) is missing, so a degraded instance never reports healthy.
+    healthCheckPath: /config/capabilities
     autoDeploy: true
-
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: JOB_EXECUTION
+        value: background
+      - key: ALLOW_DEV_LOGIN
+        value: "false"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_ACCOUNTING_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SHARED_DRIVE_ID
+        sync: false
+      - key: SESSION_SECRET
+        sync: false

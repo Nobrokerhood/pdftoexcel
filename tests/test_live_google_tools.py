@@ -58,7 +58,7 @@ class FakeGenAIClient:
 def test_gemini_client_uses_google_genai_schema_json(monkeypatch):
     created = []
 
-    def fake_client(api_key):
+    def fake_client(api_key, **_kwargs):
         client = FakeGenAIClient(api_key)
         created.append(client)
         return client

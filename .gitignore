@@ -44,3 +44,6 @@ scratch/
 Thumbs.db
 .vscode/
 .idea/
+
+# Golden corpus and customer documents: never committed (contains real financial data)
+testing_folder/

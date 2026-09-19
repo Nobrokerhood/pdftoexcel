@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from app.accounting.purposes import MEMBER_RECEIPT, VENDOR_INVOICE
+from app.accounting.purposes import MEMBER_RECEIPT, VENDOR_INVOICE, PETTY_CASH_REGISTER
 from app.core.config import Settings
 from app.google.sheets_service import GoogleSheetsNotConfiguredError, GoogleSheetsService
 
@@ -81,9 +81,21 @@ VENDOR_INVOICE_TEMPLATE = TemplateDefinition(
 )
 
 
+PETTY_CASH_REGISTER_TEMPLATE = TemplateDefinition(
+    purpose=PETTY_CASH_REGISTER,
+    template_code="NBH_PETTY_CASH_V1",
+    template_name="NBH Petty Cash Register Import v1",
+    version="1",
+    output_format="XLSX",
+    fields=NBH_IMPORT_COLUMNS,
+    supports_multiple_expense_entries=True,
+)
+
+
 BUILT_IN_TEMPLATES = {
     MEMBER_RECEIPT: MEMBER_RECEIPT_TEMPLATE,
     VENDOR_INVOICE: VENDOR_INVOICE_TEMPLATE,
+    PETTY_CASH_REGISTER: PETTY_CASH_REGISTER_TEMPLATE,
 }
 
 

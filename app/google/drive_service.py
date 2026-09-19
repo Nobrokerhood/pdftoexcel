@@ -97,6 +97,12 @@ class GoogleDriveService:
         )
         return result["id"]
 
+    def update_file_content(self, file_id: str, content: bytes, mime_type: str = "application/octet-stream") -> str:
+        media = MediaIoBaseUpload(io.BytesIO(content), mimetype=mime_type, resumable=False)
+        result = self._drive().files().update(fileId=file_id, media_body=media, fields="id",
+                                              supportsAllDrives=True).execute()
+        return result["id"]
+
     def move_file(self, file_id: str, folder_id: str) -> bool:
         self.validate_folder_id(folder_id)
         file_metadata = (

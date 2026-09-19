@@ -163,7 +163,7 @@ def sleeps(monkeypatch):
 def scripted_client(monkeypatch, outcomes):
     models = ScriptedModels(outcomes)
     monkeypatch.setattr(
-        gemini_module.genai, "Client", lambda api_key: ScriptedGenAIClient(models)
+        gemini_module.genai, "Client", lambda api_key, **_kwargs: ScriptedGenAIClient(models)
     )
     return GeminiDocumentClient(gemini_settings()), models
 
@@ -215,7 +215,8 @@ def test_transient_server_error_retries_up_to_limit(monkeypatch, sleeps):
     assert "503 UNAVAILABLE" in str(raised.value)
 
 
-def test_workflow_verification_overload_fails_safely_instead_of_500(monkeypatch, sleeps):
+def test_workflow_verification_overload_needs_review_instead_of_500(monkeypatch, sleeps):
+    """A persistently overloaded verifier never yields PASSED; rows stay unverified for review."""
     gemini, models = scripted_client(monkeypatch, [server_error()])
     client, sheets = workflow_client(
         extraction_provider=StaticExtractionProvider({"MEMBER_RECEIPT": MEMBER_DATA}),
@@ -227,10 +228,11 @@ def test_workflow_verification_overload_fails_safely_instead_of_500(monkeypatch,
 
     assert response.status_code == 200
     job = response.json()
-    assert job["overall_status"] == "FAILED"
-    assert job["verification_status"] == "FAILED"
-    assert "temporarily unavailable" in job["last_error"]
-    assert models.calls == 2
+    assert job["overall_status"] == "NEEDS_REVIEW"
+    assert job["verification_status"] == "NEEDS_REVIEW"
+    assert any("temporarily unavailable" in note for note in job["verification_result"]["notes"])
+    assert job["extracted_data"]["rows"][0]["_status"] == "UNVERIFIED"
+    assert models.calls == 2  # bounded retries, then stop
     assert "AI_VERIFICATION_FAILED" in activity_actions(sheets)
 
 
@@ -273,7 +275,8 @@ def test_persistent_rate_limit_says_rate_limited(monkeypatch, sleeps):
     assert "temporarily rate limited" in str(raised.value)
 
 
-def test_workflow_extraction_daily_quota_fails_with_one_call(monkeypatch, sleeps):
+def test_workflow_extraction_daily_quota_degrades_to_review_with_one_call(monkeypatch, sleeps):
+    """Quota exhaustion: one call, no retry storm, no fabricated rows, NEEDS_REVIEW with the reason."""
     gemini, models = scripted_client(monkeypatch, [daily_quota_error()])
     client, sheets = workflow_client(
         extraction_provider=GeminiExtractionProvider(gemini),
@@ -283,21 +286,17 @@ def test_workflow_extraction_daily_quota_fails_with_one_call(monkeypatch, sleeps
 
     job = upload_png(client).json()
 
-    assert job["overall_status"] == "FAILED"
-    assert job["extraction_status"] == "FAILED"
-    assert job["verification_status"] == "NOT_STARTED"
-    assert job["last_error"] == GEMINI_QUOTA_EXHAUSTED_MESSAGE
     assert models.calls == 1
-    assert {item["label"]: item["status"] for item in job["progress"]} == {
-        "File uploaded": "DONE",
-        "Stored in Incoming": "DONE",
-        "Extraction": "FAILED",
-        "AI Verification": "NOT_REACHED",
-        "Mapping": "NOT_REACHED",
-        "Validation": "NOT_REACHED",
-        "Human review": "NOT_REACHED",
-        "Excel generation": "NOT_REACHED",
-    }
+    assert job["overall_status"] == "NEEDS_REVIEW"
+    assert job["extraction_provider"] == "LOCAL_OCR"
+    assert GEMINI_QUOTA_EXHAUSTED_MESSAGE in job["extracted_data"]["provider_note"]
+    assert job["extracted_data"]["rows"] == []                       # nothing invented
+    assert job["validation_status"] == "BLOCKED"                     # zero rows cannot be approved
+    stages = {p["stage"]: p["status"] for p in job["progress"]}
+    assert stages["UPLOAD"] == "DONE"
+    assert stages["OCR_AND_EXTRACTION"] == "DONE"
+    assert stages["HUMAN_REVIEW"] == "NEEDS_ATTENTION"
+    assert "EXPORT" not in stages                                    # never claimed
 
 
 def test_non_retryable_client_error_is_not_retried(monkeypatch, sleeps):
@@ -353,25 +352,20 @@ def activity_actions(sheets):
     return [values[4] for sheet_id, values in sheets.appended if sheet_id == "activity"]
 
 
-def assert_failed_safely(response, sheets):
+def assert_degraded_safely(response, sheets):
+    """Gemini unavailable -> NEEDS_REVIEW with the reason; never PASSED, never fabricated."""
     assert response.status_code == 200
     job = response.json()
-    assert job["overall_status"] == "FAILED"
+    assert job["overall_status"] == "NEEDS_REVIEW"
     assert job["human_status"] == "NEEDS_REVIEW"
     assert job["current_step"] == "HUMAN_REVIEW"
-    assert job["last_error"] == GEMINI_SPEND_CAP_MESSAGE
+    assert job["verification_status"] != "PASSED"
     assert job["output_filename"] == ""
     assert API_KEY not in response.text
-    logged = [
-        updates.get("Overall Status")
-        for sheet_id, _, _, updates in sheets.updated
-        if sheet_id == "processing"
-    ]
-    assert "FAILED" in logged
     return job
 
 
-def test_workflow_extraction_spend_cap_fails_safely_with_one_gemini_call(monkeypatch, sleeps):
+def test_workflow_extraction_spend_cap_degrades_safely_with_one_gemini_call(monkeypatch, sleeps):
     gemini, models = scripted_client(monkeypatch, [spend_cap_error()])
     client, sheets = workflow_client(
         extraction_provider=GeminiExtractionProvider(gemini),
@@ -379,16 +373,17 @@ def test_workflow_extraction_spend_cap_fails_safely_with_one_gemini_call(monkeyp
         repair_provider=GeminiRepairProvider(gemini),
     )
 
-    job = assert_failed_safely(upload_png(client), sheets)
+    job = assert_degraded_safely(upload_png(client), sheets)
 
     assert models.calls == 1
     assert sleeps == []
-    assert job["extraction_status"] == "FAILED"
-    assert job["extracted_data"] == {}
-    assert "EXTRACTION_FAILED" in activity_actions(sheets)
+    assert job["extraction_provider"] == "LOCAL_OCR"
+    assert GEMINI_SPEND_CAP_MESSAGE in job["extracted_data"]["provider_note"]
+    assert job["extracted_data"]["rows"] == []
+    assert "EXTRACTION_COMPLETED" in activity_actions(sheets)
 
 
-def test_workflow_verification_spend_cap_fails_safely_without_repair(monkeypatch, sleeps):
+def test_workflow_verification_spend_cap_needs_review_without_repair(monkeypatch, sleeps):
     gemini, models = scripted_client(monkeypatch, [spend_cap_error()])
     repair = StaticRepairProvider(MEMBER_DATA)
     client, sheets = workflow_client(
@@ -397,30 +392,31 @@ def test_workflow_verification_spend_cap_fails_safely_without_repair(monkeypatch
         repair_provider=repair,
     )
 
-    job = assert_failed_safely(upload_png(client), sheets)
+    job = assert_degraded_safely(upload_png(client), sheets)
 
     assert models.calls == 1
     assert repair.calls == 0
-    assert job["verification_status"] == "FAILED"
-    assert job["mapping_status"] == "NOT_STARTED"
+    assert job["verification_status"] == "NEEDS_REVIEW"
+    assert any(GEMINI_SPEND_CAP_MESSAGE in n for n in job["verification_result"]["notes"])
     assert "AI_VERIFICATION_FAILED" in activity_actions(sheets)
 
 
-def test_workflow_repair_spend_cap_stops_verification_loop(monkeypatch, sleeps):
+def test_workflow_repair_spend_cap_is_bounded_and_goes_to_review(monkeypatch, sleeps):
     gemini, models = scripted_client(monkeypatch, [spend_cap_error()])
     verifier = StaticVerificationProvider([{"overall_status": "FAILED", "fields": []}])
+    missing_amount = {**MEMBER_DATA, "amount": None, "reference_number": "UPI123456"}
     client, sheets = workflow_client(
-        extraction_provider=StaticExtractionProvider({"MEMBER_RECEIPT": MEMBER_DATA}),
+        extraction_provider=StaticExtractionProvider({"MEMBER_RECEIPT": missing_amount}),
         verification_provider=verifier,
         repair_provider=GeminiRepairProvider(gemini),
     )
 
-    job = assert_failed_safely(upload_png(client), sheets)
+    job = assert_degraded_safely(upload_png(client), sheets)
 
-    assert models.calls == 1
-    assert verifier.calls == 1
-    assert job["extraction_status"] == "FAILED"
-    assert "AI_REPAIR_FAILED" in activity_actions(sheets)
+    assert models.calls == 1          # one repair attempt, spend cap not retried
+    assert verifier.calls == 2        # verify, repair, re-verify once; no loop
+    repair_stage = [p for p in job["progress"] if p["stage"] == "REPAIR"]
+    assert repair_stage and repair_stage[0]["status"] == "SKIPPED"
 
 
 def test_legacy_converter_returns_503_on_spend_cap_without_retrying_pages(monkeypatch, sleeps):
@@ -430,6 +426,7 @@ def test_legacy_converter_returns_503_on_spend_cap_without_retrying_pages(monkey
 
     response = client.post(
         "/export-to-excel/",
+        headers=headers(token(client)),  # legacy tools now require a session
         files={"file": ("table.png", png_bytes(), "image/png")},
     )
 

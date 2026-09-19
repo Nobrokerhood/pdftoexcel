@@ -22,7 +22,7 @@ def test_human_corrections_endpoint_persists_user_edits():
     auth = headers(session_token)
 
     # Initial row has raw bill head
-    initial_rows = job["mapping_result"]["mapped_data"]["rows"]
+    initial_rows = job["extracted_data"]["rows"]
     assert len(initial_rows) > 0
 
     # User explicitly edits row 0 in human review
@@ -40,14 +40,17 @@ def test_human_corrections_endpoint_persists_user_edits():
     updated_job = resp.json()
 
     # User edit is authoritative and persisted
-    updated_rows = updated_job["mapping_result"]["mapped_data"]["rows"]
+    updated_rows = updated_job["extracted_data"]["rows"]
     assert updated_rows[0]["Bill Head*"] == "Custom Maintenance Head"
     assert updated_rows[0]["Comments"] == "User edited comment"
 
     # Human corrections audit is recorded
     assert len(updated_job["human_corrections"]) > 0
+    # Audit is per field and keyed by row_id (was one opaque "rows" entry).
     correction_fields = [c["field"] for c in updated_job["human_corrections"]]
-    assert "rows" in correction_fields
+    assert "Bill Head*" in correction_fields and "Comments" in correction_fields
+    assert all(c["row_id"] == initial_rows[0]["_row_id"] for c in updated_job["human_corrections"])
+    assert "Bill Head*" in updated_rows[0]["_edited_fields"]
 
     # Approve and verify Excel contains user-edited values
     approved = client.post(f"/processing/jobs/{job_id}/approve", headers=auth)

@@ -232,9 +232,10 @@ def test_production_gemini_and_ocr_config_invariants():
     assert settings.gemini_model == "gemini-2.5-flash"
 
     client = _test_client(settings)
-    res = client.get("/readiness")
-    assert res.status_code == 200
+    res = client.get("/config/capabilities")
     data = res.json()
-    assert "rapidocr_ready" in data["checks"]
-    assert data["checks"]["rapidocr_ready"] is True
+    # RapidOCR availability is proven by a real inference probe on the
+    # pipeline's own engine instance (it used to be a hardcoded True).
+    assert data["capabilities"]["rapidocr"]["status"] == "READY"
+    assert data["capabilities"]["rapidocr"]["detail"] == "inference probe passed"
 

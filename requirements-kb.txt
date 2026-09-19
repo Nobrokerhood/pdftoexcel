@@ -1,0 +1,6 @@
+# Optional Knowledge Bot dependencies (not needed by the accounting pipeline).
+# Install with: pip install -r requirements-kb.txt
+sentence-transformers
+pinecone
+scikit-learn
+chromadb

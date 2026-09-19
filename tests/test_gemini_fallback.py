@@ -63,7 +63,7 @@ def keyed_clients(monkeypatch, primary_outcomes, fallback_outcomes=(OK_JSON,)):
     }
     created = []
 
-    def factory(api_key):
+    def factory(api_key, **_kwargs):
         created.append(api_key)
         return ScriptedGenAIClient(models[api_key])
 
@@ -258,9 +258,8 @@ def recorded_google_writes(sheets):
 
 
 def test_workflow_continues_on_fallback_when_primary_capped(monkeypatch, sleeps, caplog):
-    verification = '{"overall_status": "PASSED", "fields": []}'
     client, sheets, primary, fallback = gemini_workflow(
-        monkeypatch, [spend_cap_error()], [json.dumps(MEMBER_DATA), verification]
+        monkeypatch, [spend_cap_error()], [json.dumps(MEMBER_DATA)]
     )
 
     with caplog.at_level(logging.DEBUG):
@@ -270,11 +269,14 @@ def test_workflow_continues_on_fallback_when_primary_capped(monkeypatch, sleeps,
     job = response.json()
     assert job["overall_status"] == "NEEDS_REVIEW"
     assert job["extraction_status"] == "COMPLETED"
-    assert job["verification_status"] == "PASSED"
-    assert job["extracted_data"]["reference_number"] == MEMBER_DATA["reference_number"]
+    assert job["extraction_provider"] == "GEMINI"
+    assert job["extracted_data"]["rows"][0]["Cheque/Ref No*"] == MEMBER_DATA["reference_number"]
+    # The source image has no OCR text, so the model's row cannot be corroborated:
+    # it goes to review instead of being verified by the same model.
+    assert job["verification_status"] == "NEEDS_REVIEW"
     assert job["last_error"] == ""
-    # Primary tried once for extraction; verification used the fallback directly (cooldown).
-    assert (primary.calls, fallback.calls) == (1, 2)
+    # Primary tried once; the fallback served the extraction.
+    assert (primary.calls, fallback.calls) == (1, 1)
     assert "fallback" not in response.text.lower()
     assert_no_key_values(response.text, recorded_google_writes(sheets), caplog.text)
 
@@ -289,10 +291,13 @@ def test_workflow_fails_safely_when_both_keys_capped(monkeypatch, sleeps, caplog
 
     assert response.status_code == 200
     job = response.json()
-    assert job["overall_status"] == "FAILED"
+    # Degrades to OCR evidence and human review; never fabricated, never PASSED.
+    assert job["overall_status"] == "NEEDS_REVIEW"
     assert job["current_step"] == "HUMAN_REVIEW"
-    assert job["extracted_data"] == {}
-    assert job["last_error"].startswith(GEMINI_SPEND_CAP_MESSAGE)
+    assert job["extracted_data"]["rows"] == []
+    assert job["extraction_provider"] == "LOCAL_OCR"
+    assert GEMINI_SPEND_CAP_MESSAGE in job["extracted_data"]["provider_note"]
+    assert job["verification_status"] != "PASSED"
     assert (primary.calls, fallback.calls) == (1, 1)
-    assert "EXTRACTION_FAILED" in activity_actions(sheets)
-    assert_no_key_values(response.text, job["last_error"], recorded_google_writes(sheets), caplog.text)
+    assert_no_key_values(response.text, job["extracted_data"]["provider_note"], recorded_google_writes(sheets),
+                         caplog.text)

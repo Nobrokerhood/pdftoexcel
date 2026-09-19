@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.accounting.folders import FolderConfigurationError
 from app.accounting.purposes import PURPOSES
@@ -147,3 +148,48 @@ async def config_health(request: Request, session=Depends(require_session)):
             statuses["drive_root"] = "NO_ACCESS"
 
     return {"status": statuses}
+
+
+_CAPABILITY_CACHE: dict = {}
+_CAPABILITY_TTL_SECONDS = 60
+
+
+@router.get("/capabilities")
+async def capability_health(request: Request):
+    """Capability report (status only: never credentials, keys, ids or paths).
+
+    Unauthenticated so deployment health checks can read it; cached for 60 s so
+    health polling cannot turn into repeated OCR inference. It never spends a
+    Gemini call: the live Gemini probe is /config/capabilities/live (admin only).
+    """
+    import time
+    from starlette.concurrency import run_in_threadpool
+    from app.documents.capabilities import collect_capabilities
+
+    cached = _CAPABILITY_CACHE.get("report")
+    if not cached or time.time() - cached[0] > _CAPABILITY_TTL_SECONDS:
+        state = request.app.state
+        report = await run_in_threadpool(collect_capabilities, state.settings, False, state.ocr_service,
+                                         state.drive_service, state.sheets_service, state.gemini_client)
+        _CAPABILITY_CACHE["report"] = (time.time(), report)
+    report = _CAPABILITY_CACHE["report"][1]
+    return JSONResponse(status_code=200 if report["overall"] in {"READY", "DEGRADED"} else 503, content=report)
+
+
+@router.get("/capabilities/live")
+async def capability_health_live(request: Request, session=Depends(require_session)):
+    """Same report plus one real Gemini call. Admin only (it costs quota)."""
+    from starlette.concurrency import run_in_threadpool
+    from app.documents.capabilities import collect_capabilities
+
+    require_admin(session)
+    state = request.app.state
+    report = await run_in_threadpool(collect_capabilities, state.settings, True, state.ocr_service,
+                                     state.drive_service, state.sheets_service)
+    return JSONResponse(status_code=200 if report["overall"] in {"READY", "DEGRADED"} else 503, content=report)
+
+
+@router.get("/version")
+async def version():
+    from app.documents.capabilities import deployed_version
+    return deployed_version()

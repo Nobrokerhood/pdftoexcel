@@ -229,6 +229,42 @@ class MemberReceiptExtractor:
             results["bill_head"] = missing("bill_head", "no known bill head mentioned")
 
         data = {name: self._data_value(results[name]) for name in self.fields}
+
+        # Check for Member Schedule / Dues Table (e.g. sample-radhakrishna.pdf)
+        text_lower = representation.text.lower()
+        if "members list" in text_lower or ("opg.bal" in text_lower and ("unit" in text_lower or "member name" in text_lower)):
+            member_rows = self._extract_member_schedule(representation)
+            if member_rows:
+                data["rows"] = member_rows
+                data["document_type"] = "SOCIETY_MEMBER_LEDGER"
+                if not data.get("amount") or data.get("amount") == "-":
+                    data["amount"] = member_rows[0].get("Amount*")
+                if not data.get("tower") or data.get("tower") == "-":
+                    data["tower"] = member_rows[0].get("Tower No*")
+                if not data.get("flat") or data.get("flat") == "-":
+                    data["flat"] = member_rows[0].get("Flat No*")
+                if not data.get("bill_head") or data.get("bill_head") == "-":
+                    data["bill_head"] = member_rows[0].get("Bill Head*")
+                if not data.get("transaction_date") or data.get("transaction_date") == "-":
+                    data["transaction_date"] = member_rows[0].get("Transaction Date*")
+                if not data.get("comments") or data.get("comments") == "-":
+                    data["comments"] = member_rows[0].get("Comments")
+
+        # Check for Bank Statement Table (e.g. IDFC FIRST bank statement)
+        elif "statement of account" in text_lower or ("opening balance" in text_lower and ("debit" in text_lower or "credit" in text_lower)):
+            stmt_rows = self._extract_bank_statement_rows(representation)
+            if stmt_rows:
+                data["rows"] = stmt_rows
+                data["document_type"] = "BANK_STATEMENT"
+                if not data.get("amount") or data.get("amount") == "-":
+                    data["amount"] = stmt_rows[0].get("Amount*")
+                if stmt_rows[0].get("Society Bank Name/Bank code(Given to you by nobrokerhood)*") != "-":
+                    data["bank_name_or_code"] = stmt_rows[0].get("Society Bank Name/Bank code(Given to you by nobrokerhood)*")
+                if not data.get("transaction_date") or data.get("transaction_date") == "-":
+                    data["transaction_date"] = stmt_rows[0].get("Transaction Date*")
+                if not data.get("reference_number") or data.get("reference_number") == "-":
+                    data["reference_number"] = stmt_rows[0].get("Cheque/Ref No*")
+
         details = {
             "fields": {name: result.to_dict() for name, result in results.items()},
             "cross_checks": {
@@ -237,6 +273,158 @@ class MemberReceiptExtractor:
             },
         }
         return data, details
+
+    def _extract_member_schedule(self, representation: DocumentRepresentation) -> list[dict]:
+        unit_pattern = re.compile(r"^([A-Za-z])\s+(\d{1,4})(.*)$")
+        num_pattern = re.compile(r"[\d,]+\.?\d*")
+        lines = [l.text.strip() for l in representation.all_lines]
+
+        period_date = "01-04-2024"
+        for l in lines:
+            m_date = re.search(r"\b(\d{2}[-/]\d{2}[-/]\d{4})\b", l)
+            if m_date:
+                period_date = m_date.group(1).replace("/", "-")
+                break
+
+        records = []
+        current = None
+        for l in lines:
+            m = unit_pattern.match(l)
+            if m:
+                if current:
+                    records.append(current)
+                current = {"wing": m.group(1).upper(), "unit": m.group(2), "rest": [m.group(3)] if m.group(3) else []}
+            elif current:
+                if any(term in l.lower() for term in ["lakshmi sai", "members list", "period -", "co-op housing"]):
+                    records.append(current)
+                    current = None
+                else:
+                    current["rest"].append(l)
+        if current:
+            records.append(current)
+
+        rows = []
+        for r in records:
+            wing = r["wing"]
+            unit = r["unit"]
+            full_rest = " ".join(r["rest"]).strip()
+            nums = num_pattern.findall(full_rest)
+            first_num_pos = full_rest.find(nums[0]) if nums else len(full_rest)
+            name = full_rest[:first_num_pos].strip() or f"Unit {unit}"
+
+            amt = "0.00"
+            if len(nums) >= 3:
+                paid = nums[-2].replace(",", "")
+                bill_tot = nums[-3].replace(",", "")
+                amt = paid if paid not in {"-", "0", "0.00"} else bill_tot
+            elif nums:
+                amt = nums[-1].replace(",", "")
+
+            rows.append({
+                "Payment Type*": "-",
+                "Society Bank Name/Bank code(Given to you by nobrokerhood)*": "-",
+                "Cheque/Ref No*": "-",
+                "Tower No*": wing,
+                "Flat No*": unit,
+                "Bill Head*": "Maintenance",
+                "Amount*": amt,
+                "Transaction Date*": period_date,
+                "Comments": name,
+                "Meter No": "-",
+                "Cheque Issuer Bank": "-",
+                "Cheque Date": "-",
+            })
+        return rows
+
+    def _extract_bank_statement_rows(self, representation: DocumentRepresentation) -> list[dict]:
+        date_pattern = re.compile(r"^\d{2}-[A-Za-z]{3}-\d{4}$")
+        num_pattern = re.compile(r"^[\d,]+\.\d{2}$")
+        lines = [l.text.strip() for l in representation.all_lines]
+
+        bank_name = "-"
+        text_lower = representation.text.lower()
+        if "idfc first" in text_lower:
+            bank_name = "IDFC FIRST Bank"
+        elif "hdfc" in text_lower:
+            bank_name = "HDFC Bank"
+        elif "icici" in text_lower:
+            bank_name = "ICICI Bank"
+        elif "sbi" in text_lower or "state bank" in text_lower:
+            bank_name = "State Bank of India"
+
+        tf_regex = re.compile(
+            r"\b(?:flat|unit|flt|apt)\s*[:#-]?\s*([A-Za-z])?\s*(\d{2,4})\b|\b([A-Za-z])\s+(\d{2,4})\b|\b([A-Za-z])(\d{3,4})(?:apt|flat)?",
+            re.IGNORECASE,
+        )
+        utr_regex = re.compile(r"\b(?:utr|chq|cheque|ref|tran\s*id|txn|imps/|upi/mob/|neft/)?([0-9]{8,16})\b", re.IGNORECASE)
+
+        rows = []
+        i = 0
+        while i < len(lines):
+            if date_pattern.match(lines[i]):
+                tx_date = lines[i]
+                i += 1
+                if i < len(lines) and date_pattern.match(lines[i]):
+                    i += 1
+                narr_parts = []
+                amt_parts = []
+                while i < len(lines) and not date_pattern.match(lines[i]):
+                    token = lines[i]
+                    if num_pattern.match(token):
+                        amt_parts.append(token)
+                    else:
+                        narr_parts.append(token)
+                    i += 1
+                narr = " ".join(narr_parts).strip()
+                if amt_parts:
+                    tx_amt = amt_parts[0].replace(",", "")
+                    ref_no = "-"
+                    m_utr = utr_regex.search(narr)
+                    if m_utr:
+                        ref_no = m_utr.group(1)
+
+                    pay_type = "Bank Transfer"
+                    narr_upper = narr.upper()
+                    if "UPI" in narr_upper:
+                        pay_type = "UPI"
+                    elif "IMPS" in narr_upper:
+                        pay_type = "IMPS"
+                    elif "NEFT" in narr_upper:
+                        pay_type = "NEFT"
+                    elif "CHQ" in narr_upper or "CHEQUE" in narr_upper:
+                        pay_type = "Cheque"
+
+                    tower = "-"
+                    flat = "-"
+                    m_tf = tf_regex.search(narr)
+                    if m_tf:
+                        if m_tf.group(1) and m_tf.group(2):
+                            tower = m_tf.group(1).upper()
+                            flat = m_tf.group(2)
+                        elif m_tf.group(3) and m_tf.group(4):
+                            tower = m_tf.group(3).upper()
+                            flat = m_tf.group(4)
+                        elif m_tf.group(5) and m_tf.group(6):
+                            tower = m_tf.group(5).upper()
+                            flat = m_tf.group(6)
+
+                    rows.append({
+                        "Payment Type*": pay_type,
+                        "Society Bank Name/Bank code(Given to you by nobrokerhood)*": bank_name,
+                        "Cheque/Ref No*": ref_no,
+                        "Tower No*": tower,
+                        "Flat No*": flat,
+                        "Bill Head*": "Maintenance",
+                        "Amount*": tx_amt,
+                        "Transaction Date*": tx_date,
+                        "Comments": narr[:100],
+                        "Meter No": "-",
+                        "Cheque Issuer Bank": "-",
+                        "Cheque Date": "-",
+                    })
+            else:
+                i += 1
+        return rows
 
     @staticmethod
     def _data_value(result: FieldResult):

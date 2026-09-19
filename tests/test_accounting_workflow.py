@@ -9,6 +9,7 @@ from app.auth.google_auth import VerifiedGoogleUser
 from app.core.config import Settings
 from app.google.sheet_schemas import schema_for
 from app.processing.stores import GoogleSheetsProcessingJobStore
+from tests.conftest import png_bytes
 
 
 def settings(max_retries=2) -> Settings:
@@ -150,8 +151,10 @@ class StaticExtractionProvider:
 
 
 class StaticVerificationProvider:
+    # Verification is attributed by row_id only; a bare "PASSED" with no row
+    # coverage no longer verifies anything (it used to be a default PASS).
     def __init__(self, results=None):
-        self.results = list(results or [{"overall_status": "PASSED", "fields": []}])
+        self.results = list(results or [{"overall_status": "PASSED", "rows": {"r0_001": "VERIFIED"}}])
         self.calls = 0
 
     def verify(self, source_bytes, purpose, template, extracted_data):
@@ -165,9 +168,11 @@ class StaticRepairProvider:
         self.repaired = repaired
         self.calls = 0
 
-    def repair(self, source_bytes, purpose, template, extracted_data, verification_result):
+    # Field-level repair contract: requests in, corrections by field_id out.
+    def repair(self, source_bytes, purpose, template, requests):
         self.calls += 1
-        return self.repaired.copy()
+        return {"corrections": [{"field_id": r["field_id"], "value": self.repaired.get(r["column"])}
+                                for r in requests if self.repaired.get(r["column"]) is not None]}
 
 
 def records(include_mapping=True):
@@ -233,7 +238,7 @@ def client_for(data=None, sheet_records=None, verify_results=None, repaired=None
         google_token_verifier=FakeVerifier(),
         extraction_provider=StaticExtractionProvider(data or {"MEMBER_RECEIPT": MEMBER_DATA, "VENDOR_INVOICE": VENDOR_DATA}),
         verification_provider=StaticVerificationProvider(verify_results),
-        repair_provider=StaticRepairProvider(repaired or MEMBER_DATA),
+        repair_provider=StaticRepairProvider(repaired or {}),
     )
     return TestClient(app), app, drive, sheets
 
@@ -275,7 +280,7 @@ def persistent_client_for(sheet_records, drive=None, job_store=None):
             {"MEMBER_RECEIPT": MEMBER_DATA, "VENDOR_INVOICE": VENDOR_DATA}
         ),
         verification_provider=StaticVerificationProvider(),
-        repair_provider=StaticRepairProvider(MEMBER_DATA),
+        repair_provider=StaticRepairProvider({}),
         job_store=job_store or GoogleSheetsProcessingJobStore(sheets),
     )
     return TestClient(app), app, drive, sheets
@@ -296,8 +301,15 @@ def start_job(client, session_token, purpose="MEMBER_RECEIPT"):
         "/processing/jobs",
         headers=headers(session_token),
         data={"purpose": purpose},
-        files={"file": ("synthetic.pdf", b"SYNTHETIC TEST DATA", "application/pdf")},
+        files={"file": ("synthetic.png", png_bytes(), "image/png")},
     )
+
+
+NBH_COLUMNS = (
+    "Payment Type*", "Society Bank Name/Bank code(Given to you by nobrokerhood)*", "Cheque/Ref No*", "Tower No*",
+    "Flat No*", "Bill Head*", "Amount*", "Transaction Date*", "Comments", "Meter No", "Cheque Issuer Bank",
+    "Cheque Date",
+)
 
 
 def test_member_receipt_happy_path_generates_exact_xlsx_after_approval():
@@ -357,56 +369,39 @@ def test_vendor_invoice_happy_path_generates_exact_xlsx_after_approval():
     downloaded = client.get(f"/processing/jobs/{body['job_id']}/download", headers=headers(session_token))
     wb = load_workbook(io.BytesIO(downloaded.content))
     columns = [cell.value for cell in next(wb.active.iter_rows(max_row=1))]
-    assert columns == [
-        "Bill Number",
-        "Bill Date",
-        "Vendor Code",
-        "Due Date",
-        "Narration",
-        "CGST Amount",
-        "SGST Amount",
-        "IGST Amount",
-        "TDS Amount",
-        "Expense Code",
-        "Expense Amount",
-    ]
+    # The primary sheet is the exact 12 NBH import columns for every purpose;
+    # vendor-specific detail moved to the "Vendor Detail" supporting sheet.
+    assert columns == list(NBH_COLUMNS)
     assert drive.uploads[1]["folder_id"] == "vendor-out"
 
 
-def test_verification_mismatch_repairs_then_passes():
+def test_verification_mismatch_flags_the_row_and_human_fix_allows_approval():
+    """Whole-record repair was removed: a row-level MISMATCH sends that row to
+    review; the reviewer's field edit resolves it and approval proceeds."""
     bad = MEMBER_DATA.copy()
     bad["amount"] = "18800"
-    repaired = MEMBER_DATA.copy()
-    repaired["amount"] = "11800"
     client, _, _, _ = client_for(
         data={"MEMBER_RECEIPT": bad, "VENDOR_INVOICE": VENDOR_DATA},
-        repaired=repaired,
-        verify_results=[
-            {
-                "overall_status": "FAILED",
-                "fields": [
-                    {
-                        "field": "amount",
-                        "extracted_value": "18800",
-                        "verified_value": "11800",
-                        "status": "MISMATCH",
-                        "confidence": 0.98,
-                        "evidence": "Total = 11800",
-                    }
-                ],
-            },
-            {"overall_status": "PASSED", "fields": []},
-        ],
+        verify_results=[{"overall_status": "NEEDS_REVIEW", "rows": [
+            {"row_id": "r0_001", "status": "MISMATCH",
+             "fields": [{"column": "Amount*", "verified_value": "11800", "status": "MISMATCH",
+                         "evidence": "Total = 11800"}]}]}],
     )
     session_token = token(client)
+    body = start_job(client, session_token).json()
+    assert body["overall_status"] == "NEEDS_REVIEW"
+    assert body["verification_status"] == "NEEDS_REVIEW"
+    assert body["extracted_data"]["rows"][0]["_status"] == "NEEDS_REVIEW"
+    blocked = client.post(f"/processing/jobs/{body['job_id']}/approve", headers=headers(session_token))
+    assert blocked.status_code == 409
 
-    response = start_job(client, session_token)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["extraction_attempt"] == 2
-    assert body["verification_status"] == "PASSED"
-    assert body["extracted_data"]["amount"] == "11800"
+    fixed = client.post(f"/processing/jobs/{body['job_id']}/rows/r0_001", headers=headers(session_token),
+                        json={"values": {"Amount*": "11800"}, "reason": "source shows 11800"})
+    assert fixed.status_code == 200
+    assert fixed.json()["extracted_data"]["rows"][0]["Amount*"] == "11800"
+    assert fixed.json()["validation_status"] == "PASSED"
+    approved = client.post(f"/processing/jobs/{body['job_id']}/approve", headers=headers(session_token))
+    assert approved.status_code == 200, approved.text
 
 
 def test_verification_retry_exhausted_needs_review():
@@ -421,7 +416,8 @@ def test_verification_retry_exhausted_needs_review():
     assert response.status_code == 200
     body = response.json()
     assert body["overall_status"] == "NEEDS_REVIEW"
-    assert body["verification_status"] == "FAILED"
+    # A result without row_id verifies nothing: the row is UNVERIFIED, never PASSED.
+    assert body["verification_status"] == "NEEDS_REVIEW"
 
 
 def test_missing_mapping_needs_review_then_resolution_resumes_validation():
@@ -432,6 +428,8 @@ def test_missing_mapping_needs_review_then_resolution_resumes_validation():
 
     assert body["mapping_status"] == "NEEDS_MAPPING"
     assert body["overall_status"] == "NEEDS_REVIEW"
+    # An unmapped value is a warning (the source value is exported), never a blocker.
+    assert body["validation_status"] == "PASSED"
 
     resolved = client.post(
         f"/processing/jobs/{body['job_id']}/mapping",
@@ -460,14 +458,15 @@ def test_human_edit_reruns_validation():
     assert body["validation_status"] == "BLOCKED"
 
     edited = client.post(
-        f"/processing/jobs/{body['job_id']}/corrections",
+        f"/processing/jobs/{body['job_id']}/rows/r0_001",
         headers=headers(session_token),
-        json={"corrections": {"amount": "5000"}},
+        json={"values": {"Amount*": "5000"}, "reason": "read from source"},
     )
 
     assert edited.status_code == 200
     assert edited.json()["validation_status"] == "PASSED"
-    assert edited.json()["human_corrections"][0]["field"] == "amount"
+    assert edited.json()["human_corrections"][0]["field"] == "Amount*"
+    assert edited.json()["human_corrections"][0]["row_id"] == "r0_001"
 
 
 def test_human_reject_generates_no_output():
