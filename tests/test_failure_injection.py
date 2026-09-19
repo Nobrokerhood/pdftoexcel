@@ -152,3 +152,24 @@ def test_zero_rows_from_gemini_is_never_an_approvable_empty_workbook():
                                DocumentExtractionPipeline(gemini, ocr).extract(_doc_png(), "PETTY_CASH_REGISTER"))
     result = AccountingValidationService().validate("PETTY_CASH_REGISTER", data)
     assert result.status == "BLOCKED" and any(i.code == "NO_TRANSACTIONS" for i in result.issues)
+
+
+def test_production_without_a_detectable_memory_limit_never_loads_paddleocr(monkeypatch):
+    """Loading PaddleOCR crashed the Render instance twice (limit not exposed via cgroups)."""
+    from app.core import resources
+    monkeypatch.setattr(resources, "container_memory_limit_mb", lambda: None)
+    monkeypatch.delenv("OCR_ENSEMBLE", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    profile = resources.ocr_profile()
+    assert profile["ensemble"] == "off" and "not detectable" in profile["reasons"][0]
+    monkeypatch.setenv("OCR_ENSEMBLE", "auto")          # an operator can opt in explicitly
+    assert resources.ocr_profile()["ensemble"] == "auto"
+
+
+def test_small_container_disables_the_ensemble_and_lowers_dpi(monkeypatch):
+    from app.core import resources
+    monkeypatch.setattr(resources, "container_memory_limit_mb", lambda: 900)
+    monkeypatch.delenv("OCR_ENSEMBLE", raising=False)
+    monkeypatch.delenv("OCR_CANONICAL_DPI", raising=False)
+    profile = resources.ocr_profile()
+    assert (profile["ensemble"], profile["dpi"]) == ("off", 150)

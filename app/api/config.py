@@ -193,3 +193,13 @@ async def capability_health_live(request: Request, session=Depends(require_sessi
 async def version():
     from app.documents.capabilities import deployed_version
     return deployed_version()
+
+
+@router.get("/runtime")
+async def runtime_resources(session=Depends(require_session)):
+    """Admin-only: the process's real memory use and the OCR profile it chose."""
+    from app.core.resources import container_memory_limit_mb, ocr_profile, process_memory_mb
+
+    require_admin(session)
+    return {"container_limit_mb": container_memory_limit_mb(), "process": process_memory_mb(),
+            "ocr_profile": ocr_profile()}

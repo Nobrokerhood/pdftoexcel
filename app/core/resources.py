@@ -53,6 +53,13 @@ def ocr_profile() -> dict:
         ensemble = "off"
         reasons.append(f"PaddleOCR disabled: container memory {limit} MB < {ENSEMBLE_MIN_MB} MB "
                        f"(measured ensemble peak 1872 MB)")
+    elif limit is None and os.getenv("ENVIRONMENT", "").strip().lower() == "production":
+        # Fail safe: on a runtime that does not expose its memory limit (Render's
+        # native runtime), loading PaddleOCR crashed the instance twice. Enable the
+        # ensemble explicitly (OCR_ENSEMBLE=auto) only on an instance >= 2560 MB.
+        ensemble = "off"
+        reasons.append("PaddleOCR disabled: production memory limit not detectable; set OCR_ENSEMBLE=auto "
+                       f"only on an instance with >= {ENSEMBLE_MIN_MB} MB")
     else:
         ensemble = "auto"
     if explicit_dpi:
@@ -64,3 +71,23 @@ def ocr_profile() -> dict:
         dpi = 200
     return {"memory_limit_mb": limit, "ensemble": ensemble, "dpi": dpi, "reasons": reasons,
             "below_minimum": limit is not None and limit < MINIMUM_MB}
+
+
+def process_memory_mb() -> dict:
+    """Current and peak resident memory of this process (Linux /proc), in MB."""
+    out = {}
+    try:
+        for line in open("/proc/self/status"):
+            if line.startswith(("VmRSS:", "VmHWM:")):
+                key, value = line.split(":", 1)
+                out[key] = int(value.strip().split()[0]) // 1024
+    except OSError:
+        pass
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith(("MemTotal:", "MemAvailable:")):
+                key, value = line.split(":", 1)
+                out[key] = int(value.strip().split()[0]) // 1024
+    except OSError:
+        pass
+    return out
