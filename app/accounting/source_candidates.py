@@ -284,11 +284,27 @@ def discover_layout(page: OcrPage, lines) -> PageLayout:
         col_sizes.append(len(members))
     payment_idx = receipt_idx = None
     if amount_cols:
-        payment_idx = max(range(len(amount_cols)), key=lambda i: col_sizes[i])
+        # Densest column; ties go to the rightmost (qty / rate / AMOUNT tables put
+        # the amount last). A column headed like an amount wins outright.
+        best = max(col_sizes)
+        payment_idx = max(i for i in range(len(amount_cols)) if col_sizes[i] == best)
+        header_hint = re.compile(r"\b(amount|amt|debit|withdrawal|paid|expenditure|payment)\b", re.I)
+        for line in lines:
+            if header_hint.search(line.text) and len(_digits(line.text)) == 0:
+                for i, col in enumerate(amount_cols):
+                    if col[0] - 20 <= _center(line) <= col[1] + 20:
+                        payment_idx = i
+                        break
         right = [i for i in range(len(amount_cols)) if i > payment_idx]
-        # A register's cash-received column: a sparser column right of payments.
-        if right and len(amount_cols) <= 3:
-            receipt_idx = right[-1]
+        # A register's cash-received column: a SPARSER column right of payments.
+        # A denser right column is a running balance (bank statements), never receipts.
+        balance_header = re.compile(r"\bbalance\b", re.I)
+        if right and len(amount_cols) <= 3 and col_sizes[right[-1]] < col_sizes[payment_idx]:
+            col = amount_cols[right[-1]]
+            headed_balance = any(balance_header.search(l.text) and col[0] - 20 <= _center(l) <= col[1] + 20
+                                 for l in lines if not _digits(l.text))
+            if not headed_balance:
+                receipt_idx = right[-1]
         notes.append(f"{len(amount_cols)} amount column(s); primary at index {payment_idx}")
 
     ref_col = serial_col = None

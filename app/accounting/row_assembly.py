@@ -16,14 +16,14 @@ from typing import Callable
 
 from app.accounting.dates import canonical_date_text
 from app.accounting.fusion import (
-    ACCEPTED, ARBITRATED, AMOUNT_COL, CONFLICT, DATE_COL, GEMINI_CROP, GEMINI_PAGE, KEY_COLUMNS, MANDATORY_COLUMNS, MISSING,
+    ACCEPTED, ARBITRATED, AMOUNT_COL, CONFLICT, DATE_COL, GEMINI_CROP, GEMINI_PAGE, LOCAL_EXTRACTOR, KEY_COLUMNS, MANDATORY_COLUMNS, MISSING,
     NEEDS_REVIEW, REF_COL, SINGLE_SOURCE, VERIFIED, DecidedRow, FieldDecision, SourceVote, _canon, align_rows,
     build_ledger, decide_field, finalize_candidates, ocr_votes,
 )
 from app.accounting.money import format_amount, parse_amount
 from app.accounting.purposes import MEMBER_RECEIPT, PETTY_CASH_REGISTER, VENDOR_INVOICE
 from app.accounting.source_candidates import (
-    CATEGORY, INFLOW, PARTICULARS, RECEIPT_AMOUNT, TRANSACTION, SourceCandidate, amount_readings, anchors_readable,
+    AMOUNT as AMOUNT_ROLE, CATEGORY, INFLOW, OTHER_AMOUNT, PARTICULARS, RECEIPT_AMOUNT, TRANSACTION, SourceCandidate, amount_readings, anchors_readable,
     band_digit_text, date_readings, ref_readings,
 )
 from app.accounting.templates import NBH_IMPORT_COLUMNS
@@ -101,7 +101,12 @@ def _ocr_row_values(cand: SourceCandidate, purpose: str) -> dict[str, str]:
     values = _blank_values()
     refs = [d for d, _ in ref_readings(cand) if len(d) >= 2]
     dates = [v.isoformat() for v, _ in date_readings(cand)]
+    # Primary amount column first; otherwise the left-most other amount column
+    # (debit/credit precede a running balance on statements).
     amounts = [format_amount(v) for v, _ in amount_readings(cand)]
+    if not amounts:
+        others = sorted(amount_readings(cand, roles=(RECEIPT_AMOUNT, OTHER_AMOUNT)), key=lambda t: t[1].bbox[0])
+        amounts = [format_amount(others[0][0])] if others else []
     if refs:
         values[REF_COL] = _most_common(refs)
     if dates:
@@ -133,11 +138,12 @@ def _decide_row(row: DecidedRow, cand: SourceCandidate | None, digital: bool, ex
             if canon and len(digits) >= 2 and digits in doc_digits:
                 votes = [SourceVote("document_text", canon, proposed, "found in document OCR text")]
         if row.origin != "OCR_ONLY":
+            source = row.extra.get("proposal_source", GEMINI_PAGE)
             canon = _canon(column, proposed)
             if canon is not None:
-                votes.append(SourceVote(GEMINI_PAGE, canon, str(proposed), "page extraction"))
+                votes.append(SourceVote(source, canon, str(proposed), "proposed value"))
             elif proposed not in ("-", None, ""):
-                votes.append(SourceVote(GEMINI_PAGE, str(proposed), str(proposed), "page extraction (unparsed)"))
+                votes.append(SourceVote(source, str(proposed), str(proposed), "proposed value (unparsed)"))
         for vote in (extra_votes or {}).get(column, []):
             votes.append(vote)
         decision = decide_field(column, proposed, votes,
@@ -198,7 +204,9 @@ def assemble_document(
     doc_digits = "".join(ch for p in rep.pages for r in p.evidence for l in r.lines for ch in l.text if ch.isdigit())
     document_level = (REF_COL, DATE_COL) if purpose == VENDOR_INVOICE else ()
     # Engine whose text the page extraction was shown, per page.
-    prompt_engine = {p.page_number: p.engine for p in rep.pages} if model is not None else {}
+    # Gemini saw the primary engine's text; the local extractor READ it: neither is
+    # independent of that engine.
+    prompt_engine = {p.page_number: p.engine for p in rep.pages}
 
     def anchor(page):
         return prompt_engine.get(page) if page else None
@@ -223,7 +231,8 @@ def assemble_document(
             row_id=row_id, page=cand.page if cand else None, bbox=cand.bbox if cand else None,
             kind=mrow["kind"], candidate_id=cand.candidate_id if cand else None,
             origin="MATCHED" if cand else "MODEL_ONLY", values=dict(mrow["values"]), gemini_index=idx,
-            extra={k: v for k, v in mrow.items() if k in ("serial_no", "quantity", "rate") and v},
+            extra={**{k: v for k, v in mrow.items() if k in ("serial_no", "quantity", "rate") and v},
+                   "proposal_source": GEMINI_PAGE if model is not None else LOCAL_EXTRACTOR},
         )
         _decide_row(row, cand, cand is not None and cand.page in digital_pages, doc_digits=doc_digits,
                     document_level=document_level, anchored_to=anchor(row.page))
@@ -242,7 +251,8 @@ def assemble_document(
             if is_inflow:
                 if not amount_readings(cand, roles=(RECEIPT_AMOUNT,)):
                     continue
-            elif not (amount_readings(cand) and anchors_readable(cand)):
+            elif not (amount_readings(cand, roles=(AMOUNT_ROLE, RECEIPT_AMOUNT, OTHER_AMOUNT))
+                      and anchors_readable(cand)):
                 continue
             values = _ocr_row_values(cand, purpose)
             if is_inflow:

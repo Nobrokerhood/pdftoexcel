@@ -50,6 +50,23 @@ def test_confidence_never_picks_a_value():
     assert d.status == CONFLICT
 
 
+def test_other_numeric_columns_cannot_verify_an_amount():
+    """Regression (Patel invoice): qty/rate read identically by both engines must not
+    'verify' the rate as the line amount."""
+    votes = [SourceVote("rapidocr", "6600", "6600", role="AMOUNT"), SourceVote("paddleocr", "6500", "6500.", role="AMOUNT"),
+             SourceVote("rapidocr", "330", "330", role="OTHER_AMOUNT"), SourceVote("paddleocr", "330", "330", role="OTHER_AMOUNT")]
+    d = decide_field(AMT, None, votes)
+    assert d.value != "330" and d.status != VERIFIED
+    assert len(d.votes) == 4          # every reading is still shown as evidence
+
+
+def test_other_column_can_support_a_proposed_value():
+    """A credit proposed by extraction and read in the credit column is supported."""
+    votes = [SourceVote("pdf_text", "14759", "14,759.00", role="OTHER_AMOUNT")]
+    d = decide_field(AMT, "14759", votes, digital_text="265042025147590041624121")
+    assert d.status == VERIFIED
+
+
 def test_digital_text_is_source_truth():
     d = decide_field(AMT, "14759", [v("pdf_text", "14759")], digital_text="41624121414759")
     assert d.status == VERIFIED

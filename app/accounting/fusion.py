@@ -47,6 +47,7 @@ KEY_COLUMNS = (REF_COL, DATE_COL, AMOUNT_COL)
 MANDATORY_COLUMNS = (AMOUNT_COL, DATE_COL)
 
 GEMINI_PAGE = "gemini_page"
+LOCAL_EXTRACTOR = "local_extractor"  # deterministic extractor over the primary OCR text
 GEMINI_CROP = "gemini_crop"
 HIERARCHY = ("pdf_text", "multi_ocr", GEMINI_CROP, GEMINI_PAGE, "rapidocr", "paddleocr")
 
@@ -59,6 +60,7 @@ class SourceVote:
     value: str        # canonical comparable value
     raw: str
     detail: str = ""  # variant / line id / decision
+    role: str = ""    # column role the reading came from (AMOUNT = the primary amount column)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -143,7 +145,8 @@ def ocr_votes(cand: SourceCandidate | None, column: str) -> list[SourceVote]:
     votes: list[SourceVote] = []
     if column == AMOUNT_COL:
         for value, ev in amount_readings(cand, roles=ALL_AMOUNT_ROLES):
-            votes.append(SourceVote(_engine_source(ev.engine), format_amount(value), ev.text, f"{ev.variant} {ev.line_id}"))
+            votes.append(SourceVote(_engine_source(ev.engine), format_amount(value), ev.text,
+                                    f"{ev.variant} {ev.line_id}", ev.role))
     elif column == DATE_COL:
         for value, ev in date_readings(cand):
             votes.append(SourceVote(_engine_source(ev.engine), value.isoformat(), ev.text, f"{ev.variant} {ev.line_id}"))
@@ -165,12 +168,26 @@ def _canon(column: str, text: Any) -> str | None:
 
 def decide_field(column: str, proposed_raw: Any, votes: list[SourceVote], digital_text: str = "",
                  anchored_to: str | None = None) -> FieldDecision:
-    """Decide one key field from independent sources. Never picks by confidence."""
+    """Decide one key field from independent sources. Never picks by confidence.
+    Every reading is kept on the decision as evidence, even those not allowed to vote."""
+    decision = _decide(column, proposed_raw, votes, digital_text, anchored_to)
+    decision.votes = list(votes)
+    return decision
+
+
+def _decide(column: str, proposed_raw: Any, votes: list[SourceVote], digital_text: str = "",
+            anchored_to: str | None = None) -> FieldDecision:
+    proposed = _canon(column, proposed_raw)
+    all_votes = votes
+    if column == AMOUNT_COL:
+        # Only the primary amount column votes on the amount. Another numeric
+        # column in the same row (qty, rate, running balance) may only SUPPORT a
+        # value already proposed; otherwise two engines agreeing on the rate would
+        # "verify" the rate as the amount.
+        votes = [v for v in votes if v.role != "OTHER_AMOUNT" or (proposed is not None and v.value == proposed)]
     by_source: dict[str, set[str]] = {}
     for v in votes:
         by_source.setdefault(v.source, set()).add(v.value)
-
-    proposed = _canon(column, proposed_raw)
     values = {v.value for v in votes}
     if proposed is None and not values:
         if proposed_raw not in (None, "", "-"):
@@ -200,7 +217,9 @@ def decide_field(column: str, proposed_raw: Any, votes: list[SourceVote], digita
     # Independence: the page extraction was shown the primary OCR engine's text,
     # so the two are one evidence group, never two agreeing sources.
     def group(source: str) -> str:
-        return anchored_to if (source == GEMINI_PAGE and anchored_to) else source
+        if source in (GEMINI_PAGE, LOCAL_EXTRACTOR) and anchored_to:
+            return anchored_to
+        return source
 
     groups: dict[str, set[str]] = {}
     for src, vals in by_source.items():
@@ -214,7 +233,8 @@ def decide_field(column: str, proposed_raw: Any, votes: list[SourceVote], digita
     for value in candidates:
         sup = g_support(value)
         ocr_groups = {g for g in sup if g in ("rapidocr", "paddleocr", "pdf_text")}
-        rank = (len(ocr_groups) >= 2, len(sup), GEMINI_CROP in sup, GEMINI_PAGE in support(value))
+        in_primary_column = any(v.value == value and v.role == "AMOUNT" for v in votes)
+        rank = (len(ocr_groups) >= 2, len(sup), GEMINI_CROP in sup, GEMINI_PAGE in support(value), in_primary_column)
         ranked.append((rank, value))
     ranked.sort(reverse=True)
     best = ranked[0][1]
