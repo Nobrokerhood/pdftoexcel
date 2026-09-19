@@ -48,7 +48,7 @@ def test_health_route_imports_without_external_secrets():
     response = client.get("/")
 
     assert response.status_code == 200
-    assert response.json()["message"] == "NoBrokerHood PDF to Excel & Split API running."
+    assert "Accounting AI" in response.text  # the root serves the login page
 
 
 def test_split_pdf_returns_zip_parts_without_external_services():

@@ -162,9 +162,10 @@ def create_app(settings=None, sheets_service=None, drive_service=None, google_to
 
     root_dir = Path(__file__).resolve().parent.parent
 
-    @app.get("/")
-    def root():
-        return {"message": "NoBrokerHood PDF to Excel & Split API running."}
+    @app.get("/", include_in_schema=False)
+    def login_page():
+        # The backend also serves the login page (from main: "Serve login page").
+        return FileResponse(root_dir / "index.html")
 
     for static_file in STATIC_FILES:
         file_path = root_dir / static_file

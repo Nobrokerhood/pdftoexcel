@@ -54,13 +54,16 @@ class UserMasterService:
 
     def authorize(self, email: str, fallback_name: str = "") -> AuthorizedUser:
         email = email.strip().lower()
+        domain = (self.settings.allowed_email_domain or "").strip().lower()
+        if domain and not email.endswith(f"@{domain}"):
+            raise AuthorizationError("Email domain is not authorized.")
+
         user = self.lookup_user(email)
         if user:
             if not user.active:
                 raise AuthorizationError("User is inactive.")
             return user
 
-        domain = self.settings.allowed_email_domain
         if (
             self.settings.allow_domain_wide_access
             and domain

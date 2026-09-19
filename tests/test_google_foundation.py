@@ -209,6 +209,27 @@ def test_google_auth_unknown_user_denied():
     assert response.json()["detail"] == "User is not authorized."
 
 
+def test_google_auth_rejects_non_allowed_domain_even_if_active():
+    records = user_records()
+    records["users"].append(
+        {
+            "Email": "outsider@gmail.com",
+            "Name": "Outsider",
+            "Role": "ADMIN",
+            "Active": "true",
+        }
+    )
+    client, _ = app_client(
+        records,
+        FakeVerifier(user=VerifiedGoogleUser("outsider@gmail.com", "Outsider")),
+    )
+
+    response = client.post("/auth/google-login", json={"credential": "token"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Email domain is not authorized."
+
+
 def test_google_auth_invalid_token_denied():
     client, _ = app_client(user_records(), FakeVerifier(error=AuthError("bad token")))
 
@@ -445,6 +466,16 @@ def test_public_config_does_not_expose_secrets_or_resource_ids():
     assert "google_service_account" not in raw.lower()
     assert "users" not in raw
     assert "root" not in raw
+
+
+def test_root_serves_google_login_page():
+    client, _ = app_client(user_records())
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Continue with Google" in response.text
+    assert "google.accounts.id.initialize" in response.text
 
 
 def test_config_health_is_admin_only_and_reports_safe_statuses():

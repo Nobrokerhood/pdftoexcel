@@ -179,7 +179,7 @@ def test_domain_restriction_works_server_side():
     # Invalid domain fails
     with pytest.raises(AuthorizationError) as exc_info:
         user_master.authorize("attacker@external-domain.com", "Attacker")
-    assert "User is not authorized." in str(exc_info.value)
+    assert "not authorized" in str(exc_info.value)  # main rejects foreign domains before the user lookup
 
 
 def test_production_config_diagnostic_safe_booleans_only():
